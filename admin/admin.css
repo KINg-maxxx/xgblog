@@ -775,6 +775,72 @@ button {
   resize: vertical;
 }
 
+.timeline-subeditor {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 14px 0 0 16px;
+  border-left: 1px solid var(--line);
+}
+
+.timeline-subeditor-head,
+.timeline-subentry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-subeditor-head > strong,
+.timeline-subentry-head > strong {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.timeline-subeditor-head > button,
+.timeline-subentry .timeline-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.timeline-subeditor-head > button:hover,
+.timeline-subentry .timeline-controls button:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.timeline-sublist {
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-subentry {
+  display: grid;
+  gap: 10px;
+  padding: 2px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.timeline-subentry:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.timeline-subgrid {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 10px;
+}
+
 /* ---------- 响应式 ---------- */
 
 @media (max-width: 1080px) {
@@ -802,6 +868,11 @@ button {
   }
 
   .inbox-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-grid,
+  .timeline-subgrid {
     grid-template-columns: 1fr;
   }
 

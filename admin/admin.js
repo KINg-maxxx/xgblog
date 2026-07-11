@@ -356,6 +356,7 @@ function iconButton(label, title, onClick, extraClass = '') {
   button.type = 'button';
   button.textContent = label;
   button.title = title;
+  button.setAttribute('aria-label', title);
   if (extraClass) button.className = extraClass;
   button.addEventListener('click', onClick);
   return button;
@@ -379,6 +380,61 @@ function addTimelineEntry() {
   timelineEntries.push({ period: '2026', title: '新的里程碑', text: '', status: 'done' });
   renderTimeline();
   timelineList.lastElementChild?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function addTimelineUpdate(entryIndex) {
+  const entry = timelineEntries[entryIndex];
+  if (!Array.isArray(entry.updates)) entry.updates = [];
+  entry.updates.unshift({ date: '', title: '新的子更新', text: '' });
+  renderTimeline();
+}
+
+function moveTimelineUpdate(entryIndex, updateIndex, direction) {
+  const updates = timelineEntries[entryIndex].updates || [];
+  const target = updateIndex + direction;
+  if (target < 0 || target >= updates.length) return;
+  const [update] = updates.splice(updateIndex, 1);
+  updates.splice(target, 0, update);
+  renderTimeline();
+}
+
+function removeTimelineUpdate(entryIndex, updateIndex) {
+  if (!window.confirm('删除这条子更新？')) return;
+  timelineEntries[entryIndex].updates.splice(updateIndex, 1);
+  renderTimeline();
+}
+
+function renderTimelineUpdate(update, entryIndex, updateIndex, updateCount) {
+  const item = document.createElement('div');
+  item.className = 'timeline-subentry';
+
+  const head = document.createElement('div');
+  head.className = 'timeline-subentry-head';
+  const label = document.createElement('strong');
+  label.textContent = `子更新 ${updateIndex + 1}`;
+  const controls = document.createElement('div');
+  controls.className = 'timeline-controls';
+  const up = iconButton('↑', '上移子更新', () => moveTimelineUpdate(entryIndex, updateIndex, -1));
+  const down = iconButton('↓', '下移子更新', () => moveTimelineUpdate(entryIndex, updateIndex, 1));
+  up.disabled = updateIndex === 0;
+  down.disabled = updateIndex === updateCount - 1;
+  controls.append(
+    up,
+    down,
+    iconButton('×', '删除子更新', () => removeTimelineUpdate(entryIndex, updateIndex), 'danger'),
+  );
+  head.append(label, controls);
+
+  const grid = document.createElement('div');
+  grid.className = 'timeline-subgrid';
+  grid.appendChild(fieldBlock('日期', textInput(update.date || '', value => { update.date = value; })));
+  grid.appendChild(fieldBlock('标题', textInput(update.title || '', value => { update.title = value; })));
+  item.append(
+    head,
+    grid,
+    fieldBlock('描述', textArea(update.text || '', value => { update.text = value; })),
+  );
+  return item;
 }
 
 function renderTimelineEntry(entry, index) {
@@ -408,6 +464,25 @@ function renderTimelineEntry(entry, index) {
 
   card.appendChild(fieldBlock('标题', textInput(entry.title || '', value => { entry.title = value; })));
   card.appendChild(fieldBlock('描述', textArea(entry.text || '', value => { entry.text = value; })));
+
+  if (!Array.isArray(entry.updates)) entry.updates = [];
+  const subeditor = document.createElement('section');
+  subeditor.className = 'timeline-subeditor';
+  const subhead = document.createElement('div');
+  subhead.className = 'timeline-subeditor-head';
+  const subheading = document.createElement('strong');
+  subheading.textContent = `子更新 · ${entry.updates.length}`;
+  subhead.append(
+    subheading,
+    iconButton('+', '添加子更新', () => addTimelineUpdate(index)),
+  );
+  const sublist = document.createElement('div');
+  sublist.className = 'timeline-sublist';
+  entry.updates.forEach((update, updateIndex) => {
+    sublist.appendChild(renderTimelineUpdate(update, index, updateIndex, entry.updates.length));
+  });
+  subeditor.append(subhead, sublist);
+  card.appendChild(subeditor);
   return card;
 }
 

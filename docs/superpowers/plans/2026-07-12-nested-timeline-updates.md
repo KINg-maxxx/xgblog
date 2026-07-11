@@ -286,7 +286,7 @@ git commit -m "feat: render collapsible timeline updates"
 - Consumes: `entry.updates` returned by `/api/timeline`.
 - Produces: nested editable arrays in `timelineEntries`, submitted unchanged through the existing `saveTimelinePayload()`.
 
-- [ ] **Step 1: Write the failing admin source test**
+- [x] **Step 1: Write the failing admin source test**
 
 Add these assertions:
 
@@ -297,13 +297,13 @@ assert.ok(adminJs.includes('removeTimelineUpdate'), 'admin should delete child u
 assert.ok(adminJs.includes('timeline-subentry'), 'admin should render child update editors');
 ```
 
-- [ ] **Step 2: Run the test to verify RED**
+- [x] **Step 2: Run the test to verify RED**
 
 Run: `node tests/homepage-smoke.test.mjs`
 
 Expected: FAIL because the admin has no child-update controls.
 
-- [ ] **Step 3: Add nested list mutations**
+- [x] **Step 3: Add nested list mutations**
 
 Add minimal functions that mutate `entry.updates` and call `renderTimeline()`:
 
@@ -330,7 +330,7 @@ function removeTimelineUpdate(entryIndex, updateIndex) {
 }
 ```
 
-- [ ] **Step 4: Render child update editors**
+- [x] **Step 4: Render child update editors**
 
 Add this focused renderer using the existing form helpers:
 
@@ -381,7 +381,7 @@ subeditor.append(subhead, sublist);
 card.appendChild(subeditor);
 ```
 
-- [ ] **Step 5: Style the nested editor**
+- [x] **Step 5: Style the nested editor**
 
 Add these styles. The left rule carries hierarchy without creating a nested card:
 
@@ -433,13 +433,13 @@ Add these styles. The left rule carries hierarchy without creating a nested card
 }
 ```
 
-- [ ] **Step 6: Run the homepage test to verify GREEN**
+- [x] **Step 6: Run the homepage test to verify GREEN**
 
 Run: `node tests/homepage-smoke.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/homepage-smoke.test.mjs admin/admin.js admin/admin.css
