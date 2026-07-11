@@ -455,7 +455,7 @@ git commit -m "feat: edit timeline child updates"
 - Consumes: the validated child-update schema from Task 1.
 - Produces: visible examples with at least one parent containing three child updates, proving the default fold on the public page.
 
-- [ ] **Step 1: Write the failing content assertion**
+- [x] **Step 1: Write the failing content assertion**
 
 In `tests/homepage-smoke.test.mjs`, parse `content/timeline.json` and assert:
 
@@ -464,13 +464,13 @@ const timeline = JSON.parse(read('content/timeline.json'));
 assert.ok(timeline.some(item => item.updates?.length >= 3), 'timeline should demonstrate folded child updates');
 ```
 
-- [ ] **Step 2: Run the test to verify RED**
+- [x] **Step 2: Run the test to verify RED**
 
 Run: `node tests/homepage-smoke.test.mjs`
 
 Expected: FAIL because current timeline entries have no `updates`.
 
-- [ ] **Step 3: Group existing milestones under their projects**
+- [x] **Step 3: Group existing milestones under their projects**
 
 Move existing facts without inventing project claims. Use these child records:
 
@@ -517,13 +517,13 @@ Move existing facts without inventing project claims. Use these child records:
 
 Remove the duplicated top-level records after they become child updates. Keep `活字印刷上线` as an independent top-level milestone.
 
-- [ ] **Step 4: Run all automated verification**
+- [x] **Step 4: Run all automated verification**
 
 Run: `npm test && npm run build`
 
 Expected: all five test scripts pass and Vite exits successfully.
 
-- [ ] **Step 5: Verify desktop and mobile behavior**
+- [x] **Step 5: Verify desktop and mobile behavior**
 
 Open the running local site at `http://127.0.0.1:4175/#timeline` at desktop and mobile widths. Confirm:
 
@@ -534,7 +534,7 @@ Open the running local site at `http://127.0.0.1:4175/#timeline` at desktop and 
 - keyboard focus is visible;
 - the admin at `http://127.0.0.1:5180/` can add, edit, reorder, delete, save, and reload a child update.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```bash
 git add tests/homepage-smoke.test.mjs content/timeline.json

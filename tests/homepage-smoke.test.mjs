@@ -46,6 +46,7 @@ const app = read('src/App.jsx');
 const postsData = read('src/data/posts.js');
 const adminHtml = read('admin/index.html');
 const adminJs = read('admin/admin.js');
+const timeline = JSON.parse(read('content/timeline.json'));
 const postFiles = readdirSync(path.join(root, 'content', 'posts')).filter(name => name.endsWith('.md'));
 assert.ok(postFiles.length > 0, 'at least one Markdown post should exist');
 const firstPost = read(path.join('content', 'posts', postFiles[0]));
@@ -99,3 +100,7 @@ assert.ok(app.includes('slice(0, 2)'), 'timeline should show two child updates b
 assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');
 assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested visual branch');
 assert.match(read('src/styles.css'), /\.timeline-subupdate/);
+assert.ok(
+  timeline.some(item => item.updates?.length >= 3),
+  'timeline should demonstrate folded child updates',
+);
