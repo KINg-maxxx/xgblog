@@ -7,6 +7,7 @@ import BlurText from './react-bits/BlurText.jsx';
 import DotGrid from './react-bits/DotGrid.jsx';
 import SpotlightCard from './react-bits/SpotlightCard.jsx';
 import Feedback from './Feedback.jsx';
+import { getTimelineUpdateView } from './timeline.js';
 
 export const POST_CATEGORIES = ['随笔', '技术专栏', '学术进度'];
 
@@ -119,9 +120,7 @@ function SiteHeader() {
 
 function TimelineItem({ item, index }) {
   const [expanded, setExpanded] = useState(false);
-  const updates = Array.isArray(item.updates) ? item.updates : [];
-  const visibleUpdates = expanded ? updates : updates.slice(0, 2);
-  const hiddenCount = Math.max(0, updates.length - 2);
+  const { updates, visibleCount, hiddenCount } = getTimelineUpdateView(item.updates, expanded);
   const updatesId = `timeline-updates-${index}`;
 
   return (
@@ -138,19 +137,23 @@ function TimelineItem({ item, index }) {
 
       {updates.length > 0 && (
         <div className="timeline-subupdates" id={updatesId}>
-          {visibleUpdates.map((update, updateIndex) => (
-            <article
-              className="timeline-subupdate"
-              key={`${update.date}-${update.title}-${updateIndex}`}
-            >
-              <span className="timeline-subdot" aria-hidden="true" />
-              <div>
-                {update.date && <time>{update.date}</time>}
-                <h4>{update.title}</h4>
-                {update.text && <p>{update.text}</p>}
-              </div>
-            </article>
-          ))}
+          {updates.map((update, updateIndex) => {
+            const collapsed = updateIndex >= visibleCount;
+            return (
+              <article
+                className={`timeline-subupdate ${collapsed ? 'is-collapsed' : ''}`}
+                key={`${update.date}-${update.title}-${updateIndex}`}
+                aria-hidden={collapsed || undefined}
+              >
+                <span className="timeline-subdot" aria-hidden="true" />
+                <div className="timeline-subupdate-content">
+                  {update.date && <time>{update.date}</time>}
+                  <h4>{update.title}</h4>
+                  {update.text && <p>{update.text}</p>}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 

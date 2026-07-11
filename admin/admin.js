@@ -1,3 +1,9 @@
+import {
+  addTimelineUpdate as addTimelineUpdateState,
+  moveTimelineUpdate as moveTimelineUpdateState,
+  removeTimelineUpdate as removeTimelineUpdateState,
+} from './timeline-state.js';
+
 const fields = {
   originalSlug: document.querySelector('#originalSlug'),
   title: document.querySelector('#title'),
@@ -382,31 +388,47 @@ function addTimelineEntry() {
   timelineList.lastElementChild?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+function focusTimelineUpdate(entryIndex, updateIndex, updateAction) {
+  const card = timelineList.querySelector(`[data-timeline-index="${entryIndex}"]`);
+  if (!card) return;
+  if (updateIndex < 0) {
+    card.querySelector('[data-update-action="add"]')?.focus();
+    return;
+  }
+
+  const item = card.querySelector(`[data-update-index="${updateIndex}"]`);
+  if (!item) return;
+  let target = item.querySelector(`[data-update-action="${updateAction}"]`);
+  if (target?.disabled) {
+    const fallbackAction = updateAction === 'move-up' ? 'move-down' : 'move-up';
+    target = item.querySelector(`[data-update-action="${fallbackAction}"]`);
+  }
+  (target || item.querySelector('[data-update-action="title"]'))?.focus();
+}
+
 function addTimelineUpdate(entryIndex) {
-  const entry = timelineEntries[entryIndex];
-  if (!Array.isArray(entry.updates)) entry.updates = [];
-  entry.updates.unshift({ date: '', title: '新的子更新', text: '' });
+  const updateIndex = addTimelineUpdateState(timelineEntries, entryIndex);
   renderTimeline();
+  focusTimelineUpdate(entryIndex, updateIndex, 'title');
 }
 
 function moveTimelineUpdate(entryIndex, updateIndex, direction) {
-  const updates = timelineEntries[entryIndex].updates || [];
-  const target = updateIndex + direction;
-  if (target < 0 || target >= updates.length) return;
-  const [update] = updates.splice(updateIndex, 1);
-  updates.splice(target, 0, update);
+  const target = moveTimelineUpdateState(timelineEntries, entryIndex, updateIndex, direction);
   renderTimeline();
+  focusTimelineUpdate(entryIndex, target, direction < 0 ? 'move-up' : 'move-down');
 }
 
 function removeTimelineUpdate(entryIndex, updateIndex) {
   if (!window.confirm('删除这条子更新？')) return;
-  timelineEntries[entryIndex].updates.splice(updateIndex, 1);
+  const target = removeTimelineUpdateState(timelineEntries, entryIndex, updateIndex);
   renderTimeline();
+  focusTimelineUpdate(entryIndex, target, target < 0 ? 'add' : 'delete');
 }
 
 function renderTimelineUpdate(update, entryIndex, updateIndex, updateCount) {
   const item = document.createElement('div');
   item.className = 'timeline-subentry';
+  item.dataset.updateIndex = updateIndex;
 
   const head = document.createElement('div');
   head.className = 'timeline-subentry-head';
@@ -416,19 +438,21 @@ function renderTimelineUpdate(update, entryIndex, updateIndex, updateCount) {
   controls.className = 'timeline-controls';
   const up = iconButton('↑', '上移子更新', () => moveTimelineUpdate(entryIndex, updateIndex, -1));
   const down = iconButton('↓', '下移子更新', () => moveTimelineUpdate(entryIndex, updateIndex, 1));
+  const remove = iconButton('×', '删除子更新', () => removeTimelineUpdate(entryIndex, updateIndex), 'danger');
+  up.dataset.updateAction = 'move-up';
+  down.dataset.updateAction = 'move-down';
+  remove.dataset.updateAction = 'delete';
   up.disabled = updateIndex === 0;
   down.disabled = updateIndex === updateCount - 1;
-  controls.append(
-    up,
-    down,
-    iconButton('×', '删除子更新', () => removeTimelineUpdate(entryIndex, updateIndex), 'danger'),
-  );
+  controls.append(up, down, remove);
   head.append(label, controls);
 
   const grid = document.createElement('div');
   grid.className = 'timeline-subgrid';
+  const updateTitle = textInput(update.title || '', value => { update.title = value; });
+  updateTitle.dataset.updateAction = 'title';
   grid.appendChild(fieldBlock('日期', textInput(update.date || '', value => { update.date = value; })));
-  grid.appendChild(fieldBlock('标题', textInput(update.title || '', value => { update.title = value; })));
+  grid.appendChild(fieldBlock('标题', updateTitle));
   item.append(
     head,
     grid,
@@ -440,6 +464,7 @@ function renderTimelineUpdate(update, entryIndex, updateIndex, updateCount) {
 function renderTimelineEntry(entry, index) {
   const card = document.createElement('article');
   card.className = 'timeline-entry';
+  card.dataset.timelineIndex = index;
 
   const head = document.createElement('div');
   head.className = 'timeline-entry-head';
@@ -472,10 +497,9 @@ function renderTimelineEntry(entry, index) {
   subhead.className = 'timeline-subeditor-head';
   const subheading = document.createElement('strong');
   subheading.textContent = `子更新 · ${entry.updates.length}`;
-  subhead.append(
-    subheading,
-    iconButton('+', '添加子更新', () => addTimelineUpdate(index)),
-  );
+  const addUpdate = iconButton('+', '添加子更新', () => addTimelineUpdate(index));
+  addUpdate.dataset.updateAction = 'add';
+  subhead.append(subheading, addUpdate);
   const sublist = document.createElement('div');
   sublist.className = 'timeline-sublist';
   entry.updates.forEach((update, updateIndex) => {

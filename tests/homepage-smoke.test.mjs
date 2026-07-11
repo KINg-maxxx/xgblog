@@ -91,15 +91,21 @@ assert.ok(adminJs.includes('addTimelineUpdate'), 'admin should add child updates
 assert.ok(adminJs.includes('moveTimelineUpdate'), 'admin should reorder child updates');
 assert.ok(adminJs.includes('removeTimelineUpdate'), 'admin should delete child updates');
 assert.ok(adminJs.includes('timeline-subentry'), 'admin should render child update editors');
+assert.ok(adminJs.includes("from './timeline-state.js'"), 'admin should use tested state mutations');
+assert.ok(adminJs.includes('focusTimelineUpdate'), 'admin should restore focus after rerendering');
+assert.ok(adminJs.includes('updateAction'), 'admin controls should expose stable focus targets');
 assert.ok(app.includes("from './lib/anime.esm.min.js'"), 'App should import local Anime.js 4.4.1');
 assert.match(app, /IntersectionObserver/, 'App should use scroll observation');
 assert.match(app, /animate\(/, 'App should run Anime.js animations');
 assert.match(read('src/styles.css'), /prefers-reduced-motion/, 'CSS should respect reduced motion');
 assert.ok(app.includes('function TimelineItem'), 'timeline should use a focused item component');
-assert.ok(app.includes('slice(0, 2)'), 'timeline should show two child updates by default');
+assert.ok(app.includes('getTimelineUpdateView'), 'timeline should use tested display-state logic');
+assert.ok(app.includes('updateIndex >= visibleCount'), 'timeline should collapse updates after the preview');
 assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');
 assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested visual branch');
 assert.match(read('src/styles.css'), /\.timeline-subupdate/);
+assert.match(read('src/styles.css'), /grid-template-rows:\s*0fr/);
+assert.match(read('src/styles.css'), /overflow-wrap:\s*anywhere/);
 assert.ok(
   timeline.some(item => item.updates?.length >= 3),
   'timeline should demonstrate folded child updates',

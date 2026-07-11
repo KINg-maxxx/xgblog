@@ -1091,8 +1091,28 @@ a:focus-visible,
 
 .timeline-subupdate {
   position: relative;
+  display: grid;
+  grid-template-rows: 1fr;
   padding: 0 0 14px 18px;
-  animation: timeline-subupdate-in 240ms ease-out both;
+  opacity: 1;
+  transform: translateY(0);
+  transition: grid-template-rows 240ms ease, opacity 180ms ease, transform 240ms ease,
+    padding-bottom 240ms ease;
+}
+
+.timeline-subupdate.is-collapsed {
+  grid-template-rows: 0fr;
+  padding-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.timeline-subupdate-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .timeline-subdot {
@@ -1163,18 +1183,6 @@ a:focus-visible,
 .timeline-toggle:focus-visible {
   outline: 2px solid var(--red);
   outline-offset: 3px;
-}
-
-@keyframes timeline-subupdate-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ---------- 问题与反馈 ---------- */
