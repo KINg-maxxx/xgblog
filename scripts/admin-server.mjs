@@ -128,11 +128,24 @@ export function saveTimeline(root, entries) {
   const clean = entries.map((entry, index) => {
     const title = oneLine(entry && entry.title);
     if (!title) throw new Error(`第 ${index + 1} 条缺少标题`);
+    const updates = Array.isArray(entry.updates) ? entry.updates : [];
+    const cleanUpdates = updates.map((update, updateIndex) => {
+      const updateTitle = oneLine(update && update.title);
+      if (!updateTitle) {
+        throw new Error(`第 ${index + 1} 条历程的第 ${updateIndex + 1} 条子更新缺少标题`);
+      }
+      return {
+        date: oneLine(update.date),
+        title: updateTitle,
+        text: oneLine(update.text),
+      };
+    });
     return {
       period: oneLine(entry.period),
       title,
       text: oneLine(entry.text),
       status: TIMELINE_STATUSES.has(entry.status) ? entry.status : 'done',
+      updates: cleanUpdates,
     };
   });
   mkdirSync(path.resolve(root, 'content'), { recursive: true });

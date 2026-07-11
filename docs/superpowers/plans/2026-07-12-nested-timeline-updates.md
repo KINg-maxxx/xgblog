@@ -30,7 +30,7 @@
 - Consumes: `saveTimeline(root, entries)` with timeline entries that may contain `updates`.
 - Produces: normalized `updates: Array<{ date: string, title: string, text: string }>` on saved entries.
 
-- [ ] **Step 1: Write the failing server test**
+- [x] **Step 1: Write the failing server test**
 
 Add a child update to `savedTimeline`, assert whitespace cleanup and round-trip persistence, and add a missing-title assertion:
 
@@ -57,13 +57,13 @@ assert.throws(
 );
 ```
 
-- [ ] **Step 2: Run the test to verify RED**
+- [x] **Step 2: Run the test to verify RED**
 
 Run: `node tests/admin-server.test.mjs`
 
 Expected: FAIL because `saveTimeline` drops `updates`.
 
-- [ ] **Step 3: Add minimal nested normalization**
+- [x] **Step 3: Add minimal nested normalization**
 
 Inside `saveTimeline`, normalize each entry with this logic:
 
@@ -84,13 +84,13 @@ const cleanUpdates = updates.map((update, updateIndex) => {
 
 Return `updates: cleanUpdates` with the existing normalized parent fields.
 
-- [ ] **Step 4: Run the server test to verify GREEN**
+- [x] **Step 4: Run the server test to verify GREEN**
 
 Run: `node tests/admin-server.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/admin-server.test.mjs scripts/admin-server.mjs

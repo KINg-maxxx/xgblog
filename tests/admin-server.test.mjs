@@ -61,16 +61,32 @@ assert.throws(
 assert.deepEqual(readTimeline(workspace), []);
 
 const savedTimeline = saveTimeline(workspace, [
-  { period: '2026 · 至今', title: '进行中的项目', text: '描述一', status: 'doing' },
+  {
+    period: '2026 · 至今',
+    title: '进行中的项目',
+    text: '描述一',
+    status: 'doing',
+    updates: [
+      { date: ' 2026-07 ', title: ' 子更新 ', text: ' 说明 ' },
+    ],
+  },
   { title: '只有标题', status: '乱填的状态' },
 ]);
 assert.equal(savedTimeline.length, 2);
 assert.equal(savedTimeline[0].status, 'doing');
+assert.deepEqual(savedTimeline[0].updates, [
+  { date: '2026-07', title: '子更新', text: '说明' },
+]);
 assert.equal(savedTimeline[1].status, 'done'); // 非法状态回退为 done
 assert.equal(savedTimeline[1].period, ''); // 缺失字段补空串
+assert.deepEqual(savedTimeline[1].updates, []);
 assert.deepEqual(readTimeline(workspace), savedTimeline); // 写入后能原样读回
 
 assert.throws(() => saveTimeline(workspace, [{ text: '缺标题' }]), /标题/);
+assert.throws(
+  () => saveTimeline(workspace, [{ title: '主项目', updates: [{ text: '缺标题' }] }]),
+  /第 1 条历程的第 1 条子更新缺少标题/,
+);
 assert.throws(() => saveTimeline(workspace, 'not-an-array'), /array/);
 
 const publishCalls = [];
