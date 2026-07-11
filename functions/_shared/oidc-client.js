@@ -1,10 +1,25 @@
 import * as standardOidc from 'openid-client';
 
-import { getSiteConfig } from './sso-config.js';
+import { auditSsoEvent } from './sso-audit.js';
+import { getSiteConfig, PACT_SSO_EXPIRES_AT_CLAIM } from './sso-config.js';
 import { readCookie, unsealCookie } from './sealed-cookie.js';
 
 const SESSION_COOKIE = '__Host-wxg_session';
 const APP_ACCESS_CLAIM = 'https://periopact.cn/claims/app_access';
+
+export class OidcCallbackRejectedError extends Error {
+  constructor(reason = 'invalid_callback') {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
+export class OidcProviderUnavailableError extends Error {
+  constructor(reason = 'provider_unavailable') {
+    super(reason);
+    this.reason = reason;
+  }
+}
 
 function adapterFor(context) {
   return context.data?.oidc || standardOidc;
@@ -12,11 +27,36 @@ function adapterFor(context) {
 
 async function discover(config, oidc) {
   const auth = oidc.ClientSecretBasic ? oidc.ClientSecretBasic(config.clientSecret) : undefined;
-  return oidc.discovery(new URL(config.issuer), config.clientId, {
-    redirect_uris: [config.callbackUri],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'client_secret_basic',
-  }, auth);
+  try {
+    return await oidc.discovery(new URL(config.issuer), config.clientId, {
+      redirect_uris: [config.callbackUri],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'client_secret_basic',
+    }, auth);
+  } catch {
+    throw new OidcProviderUnavailableError();
+  }
+}
+
+function absolutePactExpiry(response) {
+  const seconds = response?.[PACT_SSO_EXPIRES_AT_CLAIM];
+  if (typeof seconds !== 'number' || !Number.isSafeInteger(seconds) || seconds <= 0) {
+    throw new OidcProviderUnavailableError('invalid_expiry_evidence');
+  }
+  const expiresAt = seconds * 1000;
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) {
+    throw new OidcProviderUnavailableError('invalid_expiry_evidence');
+  }
+  return expiresAt;
+}
+
+function isRejectedCallbackError(error) {
+  return error?.name === 'AuthorizationResponseError'
+    || (error?.name === 'ResponseBodyError' && error.status >= 400 && error.status < 500);
+}
+
+export function isOidcProviderUnavailable(error) {
+  return error instanceof OidcProviderUnavailableError;
 }
 
 export async function beginAuthorization(config, returnTo, oidc) {
@@ -44,18 +84,23 @@ export async function beginAuthorization(config, returnTo, oidc) {
 
 export async function completeAuthorization(config, request, transaction, oidc) {
   const configuration = await discover(config, oidc);
-  const tokens = await oidc.authorizationCodeGrant(configuration, new URL(request.url), {
-    expectedState: transaction.state,
-    expectedNonce: transaction.nonce,
-    pkceCodeVerifier: transaction.verifier,
-  });
-  if (!tokens.access_token || !tokens.id_token) throw new Error('Incomplete token response');
-  const expiresIn = Number(tokens.expires_in);
-  if (!Number.isFinite(expiresIn) || expiresIn <= 0) throw new Error('Invalid token expiry');
+  let tokens;
+  try {
+    tokens = await oidc.authorizationCodeGrant(configuration, new URL(request.url), {
+      expectedState: transaction.state,
+      expectedNonce: transaction.nonce,
+      pkceCodeVerifier: transaction.verifier,
+    });
+  } catch (error) {
+    if (isRejectedCallbackError(error)) throw new OidcCallbackRejectedError();
+    throw new OidcProviderUnavailableError();
+  }
+  if (!tokens.access_token || !tokens.id_token) throw new OidcProviderUnavailableError('invalid_token_response');
+  const expiresAt = absolutePactExpiry(tokens);
   return {
     accessToken: tokens.access_token,
     idToken: tokens.id_token,
-    expiresAt: Date.now() + Math.min(Math.floor(expiresIn), 8 * 60 * 60) * 1000,
+    expiresAt,
   };
 }
 
@@ -81,24 +126,43 @@ export async function readSession(context) {
     return { authenticated: false, status: 401, clear: true };
   }
   if (!stored.accessToken || !stored.idToken || !Number.isFinite(stored.expiresAt) || stored.expiresAt <= Date.now()) {
+    auditSsoEvent(context, config, 'session_inactive', 401, 'local_session_expired');
     return { authenticated: false, status: 401, clear: true };
   }
 
+  let details;
   try {
-    const details = await adapterFor(context).tokenIntrospection(await discover(config, adapterFor(context)), stored.accessToken);
-    if (!details.active || !details.sub) return { authenticated: false, status: 401, clear: true };
-    if (!hasPermission(details[APP_ACCESS_CLAIM], config.permission)) {
-      return { authenticated: false, status: 403, clear: true };
-    }
-    return {
-      authenticated: true,
-      status: 200,
-      user: { id: details.sub, name: details.name || null, picture: details.picture || null },
-      permission: config.permission,
-    };
-  } catch {
+    details = await adapterFor(context).tokenIntrospection(await discover(config, adapterFor(context)), stored.accessToken);
+  } catch (error) {
+    auditSsoEvent(context, config, 'introspection_unavailable', 503, error.reason || 'provider_unavailable');
     return { authenticated: false, status: 503, unavailable: true };
   }
+  if (!details.active || !details.sub) {
+    auditSsoEvent(context, config, 'session_inactive', 401, 'inactive_token');
+    return { authenticated: false, status: 401, clear: true };
+  }
+
+  let providerExpiresAt;
+  try {
+    providerExpiresAt = absolutePactExpiry(details);
+  } catch (error) {
+    auditSsoEvent(context, config, 'introspection_unavailable', 503, error.reason || 'provider_unavailable');
+    return { authenticated: false, status: 503, unavailable: true };
+  }
+  if (stored.expiresAt > providerExpiresAt) {
+    auditSsoEvent(context, config, 'session_inactive', 401, 'expiry_bound_changed');
+    return { authenticated: false, status: 401, clear: true };
+  }
+  if (!hasPermission(details[APP_ACCESS_CLAIM], config.permission)) {
+    auditSsoEvent(context, config, 'session_denied', 403, 'permission_denied');
+    return { authenticated: false, status: 403, clear: true };
+  }
+  return {
+    authenticated: true,
+    status: 200,
+    user: { id: details.sub, name: details.name || null, picture: details.picture || null },
+    permission: config.permission,
+  };
 }
 
 export async function endSession(config, idToken, oidc) {

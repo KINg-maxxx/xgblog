@@ -19,6 +19,10 @@ const SITES = {
   },
 };
 
+// PACT MUST return this numeric Unix-seconds value in both its token response and
+// RFC 7662 introspection response. It is the earlier of the PACT session and OIDC grant expiry.
+export const PACT_SSO_EXPIRES_AT_CLAIM = 'https://periopact.cn/claims/sso_expires_at';
+
 export function getSiteConfig(request, env) {
   const host = new URL(request.url).hostname.toLowerCase();
   const site = SITES[host];

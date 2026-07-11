@@ -8,6 +8,7 @@ import { onRequest as session } from '../functions/api/auth/session.js';
 import { sealCookie, unsealCookie } from '../functions/_shared/sealed-cookie.js';
 
 const COOKIE_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
+const PACT_SSO_EXPIRES_AT_CLAIM = 'https://periopact.cn/claims/sso_expires_at';
 const env = {
   OIDC_ISSUER: 'https://www.periopact.cn/oidc',
   OIDC_COOKIE_KEY: COOKIE_KEY,
@@ -19,22 +20,41 @@ function cookies(response) {
   return response.headers.getSetCookie?.() || [response.headers.get('Set-Cookie') || ''];
 }
 
-function request(url, cookie = '') {
-  return new Request(url, { headers: cookie ? { Cookie: cookie } : undefined });
+function request(url, cookie = '', traceId) {
+  const headers = new Headers();
+  if (cookie) headers.set('Cookie', cookie);
+  if (traceId) headers.set('X-Trace-Id', traceId);
+  return new Request(url, { headers });
 }
 
-function context(url, { cookie, oidc, logs = [] } = {}) {
-  return { request: request(url, cookie), env, data: { oidc, log: entry => logs.push(entry) } };
+function context(url, { cookie, oidc, logs = [], traceId = 'trace-test-000001' } = {}) {
+  return {
+    request: request(url, cookie, traceId),
+    env,
+    data: { oidc, log: entry => logs.push(entry), traceId },
+  };
 }
 
-function oidcAdapter({ outage = false } = {}) {
+function pactExpiry(seconds = 600) {
+  return Math.floor((Date.now() + seconds * 1000) / 1000);
+}
+
+function responseError(status, error) {
+  const failure = new Error(error);
+  failure.name = 'ResponseBodyError';
+  failure.status = status;
+  failure.error = error;
+  return failure;
+}
+
+function oidcAdapter({ discoveryOutage = false, introspectionOutage = false, tokenResponse } = {}) {
   return {
     randomState: () => 'state-value',
     randomNonce: () => 'nonce-value',
     randomPKCECodeVerifier: () => 'pkce-verifier',
     calculatePKCECodeChallenge: async verifier => `challenge-for-${verifier}`,
     discovery: async () => {
-      if (outage) throw new Error('issuer unavailable');
+      if (discoveryOutage) throw new TypeError('issuer unavailable');
       return { issuer: 'configured' };
     },
     buildAuthorizationUrl: (_configuration, parameters) => new URL(
@@ -44,22 +64,33 @@ function oidcAdapter({ outage = false } = {}) {
       assert.equal(currentUrl.searchParams.get('state'), checks.expectedState);
       assert.equal(checks.expectedNonce, 'nonce-value');
       assert.equal(checks.pkceCodeVerifier, 'pkce-verifier');
-      return { access_token: 'access-token', id_token: 'id-token', expires_in: 600 };
+      return tokenResponse || {
+        access_token: 'access-token', id_token: 'id-token', expires_in: 600,
+        [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(),
+      };
     },
     tokenIntrospection: async (_configuration, token) => {
       assert.equal(token, 'access-token');
+      if (introspectionOutage) throw new TypeError('introspection unavailable');
       return {
         active: true,
         sub: 'user-1',
         name: 'Alice',
         picture: 'avatar-1',
         'https://periopact.cn/claims/app_access': 'blog.access',
+        [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(),
       };
     },
     buildEndSessionUrl: (_configuration, parameters) => new URL(
       `https://www.periopact.cn/oidc/session/end?${new URLSearchParams(parameters)}`,
     ),
   };
+}
+
+function assertAudit(logs, entry) {
+  assert.deepEqual(logs, [entry]);
+  assert.deepEqual(Object.keys(logs[0]).sort(), ['clientId', 'event', 'reason', 'status', 'traceId']);
+  assert.doesNotMatch(JSON.stringify(logs), /authorization-code|access-token|id-token|blog-secret|pkce-verifier|Cookie|Alice/);
 }
 
 test('login uses PKCE S256, saves a five-minute transaction, and redacts credentials from logs', async () => {
@@ -81,8 +112,9 @@ test('login uses PKCE S256, saves a five-minute transaction, and redacts credent
   assert.ok(transaction.expiresAt > Date.now());
   assert.ok(transaction.expiresAt <= Date.now() + 300_000);
   assert.equal(transaction.returnTo, '/blog/');
-  assert.deepEqual(logs, [{ component: 'sso', event: 'login_started' }]);
-  assert.doesNotMatch(JSON.stringify(logs), /access-token|id-token|blog-secret|pkce-verifier|Cookie/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'login_started', status: 302, reason: 'authorization_started',
+  });
 });
 
 test('callback exchanges the code server-side, clears its transaction, and redirects without callback parameters', async () => {
@@ -101,23 +133,66 @@ test('callback exchanges the code server-side, clears its transaction, and redir
   assert.match(setCookies, /__Host-wxg_sso_tx=;[^\n]*Max-Age=0/);
   assert.match(setCookies, /HttpOnly; Secure; SameSite=Lax; Path=\//);
   assert.doesNotMatch(setCookies, /Domain=|access-token|id-token|authorization-code/);
-  assert.deepEqual(logs, [{ component: 'sso', event: 'login_completed' }]);
-  assert.doesNotMatch(JSON.stringify(logs), /authorization-code|access-token|id-token|blog-secret|pkce-verifier|Cookie/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_completed', status: 302, reason: 'authorized',
+  });
 });
 
-test('callback rejects a token response without a positive expiry', async () => {
+test('callback derives sealed-session and cookie expiry from PACT absolute SSO expiry rather than access-token expires_in', async () => {
   const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
   const transactionCookie = cookies(loginResponse)[0].split(';')[0];
-  const adapter = { ...oidcAdapter(), authorizationCodeGrant: async () => ({
-    access_token: 'access-token', id_token: 'id-token', expires_in: 'not-a-number',
-  }) };
+  const expiresAtSeconds = pactExpiry(90);
+  const adapter = oidcAdapter({ tokenResponse: {
+    access_token: 'access-token', id_token: 'id-token', expires_in: 8 * 60 * 60,
+    [PACT_SSO_EXPIRES_AT_CLAIM]: expiresAtSeconds,
+  } });
   const response = await callback(context(
     'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
     { cookie: transactionCookie, oidc: adapter },
   ));
 
-  assert.equal(response.status, 400);
+  const sessionCookie = cookies(response).find(value => value.startsWith('__Host-wxg_session='));
+  const sealed = sessionCookie.match(/__Host-wxg_session=([^;]+)/)[1];
+  const stored = await unsealCookie(sealed, COOKIE_KEY);
+  const maxAge = Number(sessionCookie.match(/Max-Age=(\d+)/)[1]);
+
+  assert.equal(response.status, 302);
+  assert.ok(stored.expiresAt <= expiresAtSeconds * 1000);
+  assert.ok(stored.expiresAt > Date.now());
+  assert.ok(maxAge <= Math.floor((expiresAtSeconds * 1000 - Date.now()) / 1000));
+});
+
+test('callback fails closed when PACT absolute expiry evidence is absent or invalid', async () => {
+  const logs = [];
+  const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+  const transactionCookie = cookies(loginResponse)[0].split(';')[0];
+  const adapter = oidcAdapter({ tokenResponse: { access_token: 'access-token', id_token: 'id-token', expires_in: 600 } });
+  const response = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: transactionCookie, oidc: adapter, logs },
+  ));
+
+  assert.equal(response.status, 503);
   assert.doesNotMatch(cookies(response).join('\n'), /__Host-wxg_session=/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_unavailable', status: 503, reason: 'invalid_expiry_evidence',
+  });
+
+  const invalidLogs = [];
+  const invalidLoginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+  const invalidTransactionCookie = cookies(invalidLoginResponse)[0].split(';')[0];
+  const invalidAdapter = oidcAdapter({ tokenResponse: {
+    access_token: 'access-token', id_token: 'id-token', [PACT_SSO_EXPIRES_AT_CLAIM]: String(pactExpiry()),
+  } });
+  const invalidResponse = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: invalidTransactionCookie, oidc: invalidAdapter, logs: invalidLogs },
+  ));
+
+  assert.equal(invalidResponse.status, 503);
+  assertAudit(invalidLogs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_unavailable', status: 503, reason: 'invalid_expiry_evidence',
+  });
 });
 
 test('callback rejects expired transactions without exchanging credentials', async () => {
@@ -146,7 +221,7 @@ test('callback delegates state, nonce, and PKCE verification to openid-client', 
     authorizationCodeGrant: async (_configuration, callbackUrl, receivedChecks) => {
       checks = receivedChecks;
       assert.equal(callbackUrl.searchParams.get('state'), 'wrong-state');
-      throw new Error('OIDC callback validation failed');
+      throw responseError(400, 'invalid_request');
     },
   };
   const response = await callback(context(
@@ -160,15 +235,62 @@ test('callback delegates state, nonce, and PKCE verification to openid-client', 
   });
 });
 
+test('callback returns 400 and audits rejected callback material separately from provider availability', async () => {
+  const logs = [];
+  const transaction = await sealCookie({
+    state: 'state-value', nonce: 'nonce-value', verifier: 'pkce-verifier', returnTo: '/', expiresAt: Date.now() + 60_000,
+  }, COOKIE_KEY);
+  const adapter = { ...oidcAdapter(), authorizationCodeGrant: async () => { throw responseError(400, 'invalid_grant'); } };
+  const response = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: `__Host-wxg_sso_tx=${transaction}`, oidc: adapter, logs },
+  ));
+
+  assert.equal(response.status, 400);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_rejected', status: 400, reason: 'invalid_callback',
+  });
+});
+
+test('discovery and token endpoint outages return 503 rather than rejected callback status', async () => {
+  const logs = [];
+  const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+  const transactionCookie = cookies(loginResponse)[0].split(';')[0];
+  const response = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: transactionCookie, oidc: oidcAdapter({ discoveryOutage: true }), logs },
+  ));
+
+  assert.equal(response.status, 503);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_unavailable', status: 503, reason: 'provider_unavailable',
+  });
+
+  const tokenLogs = [];
+  const tokenLoginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+  const tokenTransactionCookie = cookies(tokenLoginResponse)[0].split(';')[0];
+  const tokenOutageAdapter = { ...oidcAdapter(), authorizationCodeGrant: async () => { throw new TypeError('token endpoint unavailable'); } };
+  const tokenResponse = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: tokenTransactionCookie, oidc: tokenOutageAdapter, logs: tokenLogs },
+  ));
+
+  assert.equal(tokenResponse.status, 503);
+  assertAudit(tokenLogs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_unavailable', status: 503, reason: 'provider_unavailable',
+  });
+});
+
 test('issuer outages fail closed and structured logs never contain callback material', async () => {
   const logs = [];
   const response = await login(context('https://blog.periopact.cn/auth/login?returnTo=/&code=secret-code', {
-    oidc: oidcAdapter({ outage: true }), logs,
+    oidc: oidcAdapter({ discoveryOutage: true }), logs,
   }));
 
   assert.equal(response.status, 503);
-  assert.deepEqual(logs, [{ component: 'sso', event: 'login_unavailable' }]);
-  assert.doesNotMatch(JSON.stringify(logs), /secret-code|access-token|id-token|blog-secret|Cookie|pkce-verifier/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'login_unavailable', status: 503, reason: 'provider_unavailable',
+  });
 });
 
 test('session introspects opaque tokens and returns only the minimal identity and permission', async () => {
@@ -185,22 +307,90 @@ test('session introspects opaque tokens and returns only the minimal identity an
   });
 });
 
-test('session fails closed and clears the local cookie when introspection rejects the token', async () => {
+test('session fails closed, clears the local cookie, and audits inactive tokens', async () => {
+  const logs = [];
   const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
   const adapter = { ...oidcAdapter(), tokenIntrospection: async () => ({ active: false }) };
   const response = await session(context('https://blog.periopact.cn/api/auth/session', {
-    cookie: `__Host-wxg_session=${sealed}`, oidc: adapter,
+    cookie: `__Host-wxg_session=${sealed}`, oidc: adapter, logs,
   }));
 
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), { authenticated: false });
   assert.match(cookies(response).join('\n'), /__Host-wxg_session=;[^\n]*Max-Age=0/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'session_inactive', status: 401, reason: 'inactive_token',
+  });
 });
 
-test('logout clears host-only cookies and sends an RP-initiated logout request', async () => {
+test('session denies missing app permission and audits the denial', async () => {
+  const logs = [];
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const adapter = { ...oidcAdapter(), tokenIntrospection: async () => ({
+    active: true, sub: 'user-1', [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(),
+  }) };
+  const response = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie: `__Host-wxg_session=${sealed}`, oidc: adapter, logs,
+  }));
+
+  assert.equal(response.status, 403);
+  assert.match(cookies(response).join('\n'), /__Host-wxg_session=;[^\n]*Max-Age=0/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'session_denied', status: 403, reason: 'permission_denied',
+  });
+});
+
+test('session fails closed and audits introspection outages and invalid expiry evidence', async () => {
+  const logs = [];
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const response = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie: `__Host-wxg_session=${sealed}`, oidc: oidcAdapter({ introspectionOutage: true }), logs,
+  }));
+
+  assert.equal(response.status, 503);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'introspection_unavailable', status: 503, reason: 'provider_unavailable',
+  });
+
+  const missingEvidenceLogs = [];
+  const missingEvidenceAdapter = { ...oidcAdapter(), tokenIntrospection: async () => ({
+    active: true, sub: 'user-1', 'https://periopact.cn/claims/app_access': 'blog.access',
+  }) };
+  const missingEvidenceResponse = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie: `__Host-wxg_session=${sealed}`, oidc: missingEvidenceAdapter, logs: missingEvidenceLogs,
+  }));
+
+  assert.equal(missingEvidenceResponse.status, 503);
+  assertAudit(missingEvidenceLogs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'introspection_unavailable', status: 503, reason: 'invalid_expiry_evidence',
+  });
+});
+
+test('session clears a sealed cookie whose expiry exceeds the current PACT session or grant bound', async () => {
+  const logs = [];
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 10 * 60_000 }, COOKIE_KEY);
+  const adapter = { ...oidcAdapter(), tokenIntrospection: async () => ({
+    active: true,
+    sub: 'user-1',
+    'https://periopact.cn/claims/app_access': 'blog.access',
+    [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(60),
+  }) };
+  const response = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie: `__Host-wxg_session=${sealed}`, oidc: adapter, logs,
+  }));
+
+  assert.equal(response.status, 401);
+  assert.match(cookies(response).join('\n'), /__Host-wxg_session=;[^\n]*Max-Age=0/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'session_inactive', status: 401, reason: 'expiry_bound_changed',
+  });
+});
+
+test('logout clears host-only cookies, sends an RP-initiated logout request, and audits success', async () => {
+  const logs = [];
   const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
   const response = await logout(context('https://blog.periopact.cn/auth/logout', {
-    cookie: `__Host-wxg_session=${sealed}`, oidc: oidcAdapter(),
+    cookie: `__Host-wxg_session=${sealed}`, oidc: oidcAdapter(), logs,
   }));
   const location = new URL(response.headers.get('Location'));
   const setCookies = cookies(response).join('\n');
@@ -213,4 +403,7 @@ test('logout clears host-only cookies and sends an RP-initiated logout request',
   assert.match(setCookies, /__Host-wxg_sso_tx=;[^\n]*Max-Age=0/);
   assert.match(setCookies, /HttpOnly; Secure; SameSite=Lax; Path=\//);
   assert.doesNotMatch(setCookies, /Domain=/);
+  assertAudit(logs, {
+    traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'logout_completed', status: 302, reason: 'logout_started',
+  });
 });

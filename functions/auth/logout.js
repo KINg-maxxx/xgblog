@@ -1,4 +1,5 @@
 import { currentSessionCookie, endSession, oidcFor } from '../_shared/oidc-client.js';
+import { auditSsoEvent } from '../_shared/sso-audit.js';
 import { getSiteConfig } from '../_shared/sso-config.js';
 import { clearCookie, unsealCookie } from '../_shared/sealed-cookie.js';
 
@@ -15,8 +16,9 @@ function clearHeaders() {
 export async function onRequest(context) {
   if (context.request.method !== 'GET') return new Response('Method Not Allowed', { status: 405 });
   const headers = clearHeaders();
+  let config;
   try {
-    const config = getSiteConfig(context.request, context.env);
+    config = getSiteConfig(context.request, context.env);
     let idToken;
     const sealed = currentSessionCookie(context.request);
     if (sealed) {
@@ -28,8 +30,10 @@ export async function onRequest(context) {
     }
     const url = await endSession(config, idToken, oidcFor(context));
     headers.set('Location', url.href);
+    auditSsoEvent(context, config, 'logout_completed', 302, 'logout_started');
     return new Response(null, { status: 302, headers });
   } catch {
+    auditSsoEvent(context, config, 'logout_unavailable', 503, config ? 'provider_unavailable' : 'configuration_unavailable');
     return new Response('Authentication service is unavailable.', { status: 503, headers });
   }
 }
