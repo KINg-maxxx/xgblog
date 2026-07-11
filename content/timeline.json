@@ -1,0 +1,50 @@
+[
+  {
+    "period": "2026 · 至今",
+    "title": "PACT 随访管理平台",
+    "text": "面向牙周诊疗的随访管理平台，覆盖患者档案、疗程计划与随访提醒，持续开发迭代中。",
+    "status": "doing"
+  },
+  {
+    "period": "2026-7",
+    "title": "学术信息采集agent",
+    "text": "受nature- skill、AIhot及ChatGPT启发，现打算在感兴趣领域监控最新论文及信息的进展，并实现从监控到自动下载到收集到汇报PPT及分析到优化skill的loop。",
+    "status": "doing"
+  },
+  {
+    "period": "2026 · 至今",
+    "title": "本站：工具入口 → 个人站点",
+    "text": "先做好团队的工具入口，再逐步长成工具发布页、随笔博客和个人简历。",
+    "status": "doing"
+  },
+  {
+    "period": "2026",
+    "title": "评论功能上线",
+    "text": "随笔文章支持留言交流，邮箱与 IP 不公开。",
+    "status": "done"
+  },
+  {
+    "period": "2026",
+    "title": "标注工作台上线",
+    "text": "多模态口腔文字标注工作台并入工具入口，支持口内照、CBCT、口扫与咬合分析的模板化标注，结果可一键导出 JSON / TSV。",
+    "status": "done"
+  },
+  {
+    "period": "2026",
+    "title": "PerioPACT 主站与移动端上线",
+    "text": "牙周诊疗与随访管理的主工作区投入使用，并提供了面向诊间场景的移动端入口。",
+    "status": "done"
+  },
+  {
+    "period": "2026",
+    "title": "PACT View 上线",
+    "text": "不装客户端，浏览器里直接查看 CBCT、口扫等三维口腔影像，用于医患沟通与病例讨论。",
+    "status": "done"
+  },
+  {
+    "period": "2026",
+    "title": "活字印刷上线",
+    "text": "把 Markdown 文字一键排成适合微信等场景分享的排版图片。",
+    "status": "done"
+  }
+]

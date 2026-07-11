@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>随笔编辑后台 | WXG</title>
+    <link rel="stylesheet" href="/admin.css" />
+  </head>
+  <body>
+    <header class="admin-topbar">
+      <div class="topbar-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <strong>WXG</strong>
+        <small>随笔编辑后台</small>
+      </div>
+      <nav class="topbar-tabs" aria-label="后台视图">
+        <button id="tabEditor" class="topbar-tab is-active" type="button">文章编辑</button>
+        <button id="tabTimeline" class="topbar-tab" type="button">历程</button>
+        <button id="tabInbox" class="topbar-tab" type="button">评论收件箱<span id="inboxCount" class="inbox-count" hidden></span></button>
+      </nav>
+      <a class="topbar-link" href="/blog/index.html" target="_blank" rel="noreferrer">打开博客</a>
+    </header>
+
+    <!-- 文章编辑视图：左侧列表 + 中间原始内容模板 + 右侧实时预览 -->
+    <main id="editorView" class="admin-shell">
+      <aside class="post-panel">
+        <div class="panel-head">
+          <p class="eyebrow">Posts</p>
+          <button id="newPost" type="button">新建</button>
+        </div>
+        <div id="categoryFilter" class="category-filter" role="tablist" aria-label="栏目筛选"></div>
+        <div id="postList" class="post-list" aria-label="现有文章"></div>
+      </aside>
+
+      <section class="editor-panel">
+        <p class="pane-title">原始内容</p>
+        <form id="postForm" class="editor-form">
+          <input id="originalSlug" type="hidden" />
+          <label>
+            标题
+            <input id="title" name="title" required />
+          </label>
+          <div class="form-grid">
+            <label>
+              日期
+              <input id="date" name="date" type="date" required />
+            </label>
+            <label>
+              栏目
+              <select id="category" name="category">
+                <option value="随笔">随笔</option>
+                <option value="技术专栏">技术专栏</option>
+                <option value="学术进度">学术进度</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            摘要
+            <textarea id="excerpt" name="excerpt" rows="2"></textarea>
+          </label>
+          <label class="body-label">
+            正文 Markdown
+            <textarea id="body" name="body" rows="22" spellcheck="false"></textarea>
+          </label>
+          <div class="actions">
+            <button id="savePost" type="submit">保存文章</button>
+            <button id="publishPost" class="secondary" type="button">保存并发布</button>
+            <button id="deletePost" class="danger" type="button">删除文章</button>
+          </div>
+          <p id="status" class="status" role="status"></p>
+        </form>
+      </section>
+
+      <section class="preview-panel" aria-label="实时预览">
+        <p class="pane-title">实时效果</p>
+        <article class="preview-page">
+          <p id="previewMeta" class="preview-meta"></p>
+          <h1 id="previewTitle" class="preview-title"></h1>
+          <p id="previewExcerpt" class="preview-excerpt"></p>
+          <div id="preview" class="preview"></div>
+        </article>
+      </section>
+    </main>
+
+    <!-- 历程时间线编辑视图 -->
+    <main id="timelineView" class="timeline-shell" hidden>
+      <section class="timeline-editor">
+        <div class="timeline-editor-head">
+          <p class="pane-title">历程时间线</p>
+          <button id="addTimelineEntry" type="button">新增条目</button>
+        </div>
+        <p class="timeline-hint">按从上到下的顺序展示，顶部一般放"进行中"的项目。保存后需重新构建网站（点"保存并发布"）公开页面才会更新。</p>
+        <div id="timelineList" class="timeline-list"></div>
+        <div class="actions">
+          <button id="saveTimeline" type="button">保存</button>
+          <button id="publishTimeline" class="secondary" type="button">保存并发布</button>
+        </div>
+        <p id="timelineStatus" class="status" role="status"></p>
+      </section>
+    </main>
+
+    <!-- 评论收件箱视图 -->
+    <main id="inboxView" class="inbox-shell" hidden>
+      <section class="inbox-settings">
+        <p class="pane-title">评论来源</p>
+        <div class="inbox-settings-grid">
+          <label>
+            站点地址
+            <input id="commentsBase" placeholder="https://xgblog.pages.dev" />
+          </label>
+          <label>
+            管理口令（COMMENTS_ADMIN_TOKEN）
+            <input id="commentsToken" type="password" placeholder="本地开发可留空" />
+          </label>
+          <button id="refreshComments" type="button">刷新</button>
+        </div>
+        <p class="inbox-hint">本地联调可填 http://127.0.0.1:5199（vite dev，无需口令）。线上需要先按 docs/comments-setup.md 开通。</p>
+        <p id="inboxStatus" class="status" role="status"></p>
+      </section>
+      <section id="commentList" class="comment-list" aria-label="全部评论"></section>
+    </main>
+
+    <script src="/vendor/marked.umd.js"></script>
+    <script src="/admin.js" type="module"></script>
+  </body>
+</html>

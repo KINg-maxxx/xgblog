@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wxg-tool-portal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5199,
+      "autoPort": true
+    },
+    {
+      "name": "wxg-admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "admin"],
+      "port": 5180
+    },
+    {
+      "name": "wxg-tool-portal-chengguo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/xking/Syncthing/Mac-Windows-Sync/成果/个人网站/wxg-tool-portal-20260705-115015",
+        "run",
+        "dev"
+      ],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# 评论功能配置。步骤见 docs/comments-setup.md。
+# 每次 npm run deploy 会自动带上下面的 KV 绑定。
+
+name = "xgblog"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-01-01"
+
+# 评论数据存储（Cloudflare KV）
+[[kv_namespaces]]
+binding = "COMMENTS"
+id = "5bb28b1e8d2444b8a21cadf34ff3d0ce"

@@ -1,0 +1,24 @@
+{
+  "name": "wxg-tool-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node tests/homepage-smoke.test.mjs && node tests/markdown-parser.test.mjs && node tests/new-post.test.mjs && node tests/admin-server.test.mjs && node tests/comments-api.test.mjs",
+    "new:post": "node scripts/new-post.mjs",
+    "admin": "node scripts/admin-server.mjs",
+    "deploy": "npm run build && npx --yes wrangler pages deploy dist --project-name xgblog --branch main --commit-dirty=true"
+  },
+  "dependencies": {
+    "lxgw-wenkai-gb-web": "^1.522.0",
+    "marked": "^18.0.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.3.4"
+  }
+}
