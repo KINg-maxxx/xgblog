@@ -1072,6 +1072,111 @@ a:focus-visible,
   color: var(--muted);
 }
 
+.timeline-subupdates {
+  position: relative;
+  display: grid;
+  margin-top: 16px;
+  padding-left: 18px;
+}
+
+.timeline-subupdates::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  bottom: 18px;
+  width: 1px;
+  background: var(--line);
+}
+
+.timeline-subupdate {
+  position: relative;
+  padding: 0 0 14px 18px;
+  animation: timeline-subupdate-in 240ms ease-out both;
+}
+
+.timeline-subdot {
+  position: absolute;
+  left: -18px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper-soft);
+}
+
+.timeline-subupdate time,
+.timeline-subupdate p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.timeline-subupdate time {
+  display: block;
+  font-family: var(--font-kai-medium);
+}
+
+.timeline-subupdate h4 {
+  margin: 1px 0 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.timeline-subupdate p {
+  max-width: 580px;
+  margin: 3px 0 0;
+}
+
+.timeline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0 0 0 18px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+
+.timeline-toggle span {
+  transition: transform 180ms ease;
+}
+
+.timeline-toggle[aria-expanded="true"] span {
+  transform: rotate(180deg);
+}
+
+.timeline-toggle:hover {
+  color: var(--red);
+}
+
+.timeline-toggle:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+@keyframes timeline-subupdate-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ---------- 问题与反馈 ---------- */
 
 .feedback-grid {
@@ -1431,6 +1536,22 @@ button.btn {
 
   .section-block {
     padding: 56px 0;
+  }
+
+  .timeline-item {
+    padding-left: 32px;
+  }
+
+  .timeline-subupdates {
+    padding-left: 14px;
+  }
+
+  .timeline-subupdate {
+    padding-left: 16px;
+  }
+
+  .timeline-subdot {
+    left: -14px;
   }
 
   .feedback-identity-fields {

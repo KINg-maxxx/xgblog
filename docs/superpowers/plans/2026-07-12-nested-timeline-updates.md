@@ -108,7 +108,7 @@ git commit -m "feat: persist timeline child updates"
 - Consumes: `item.updates` from the imported timeline JSON.
 - Produces: `TimelineItem({ item })`, rendering two updates by default and an accessible expansion button when `updates.length > 2`.
 
-- [ ] **Step 1: Write the failing homepage structure test**
+- [x] **Step 1: Write the failing homepage structure test**
 
 Add source assertions that describe the public contract:
 
@@ -120,13 +120,13 @@ assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested 
 assert.match(read('src/styles.css'), /\.timeline-subupdate/);
 ```
 
-- [ ] **Step 2: Run the test to verify RED**
+- [x] **Step 2: Run the test to verify RED**
 
 Run: `node tests/homepage-smoke.test.mjs`
 
 Expected: FAIL because the timeline has no child-update component or styles.
 
-- [ ] **Step 3: Add the minimal React behavior**
+- [x] **Step 3: Add the minimal React behavior**
 
 Create a local component above `App`:
 
@@ -182,7 +182,7 @@ function TimelineItem({ item, index }) {
 
 Replace the inline timeline item body with `<TimelineItem item={item} index={index} />`, and change the map callback to receive `index`.
 
-- [ ] **Step 4: Add the visual branch styles**
+- [x] **Step 4: Add the visual branch styles**
 
 Use existing variables and add these focused styles:
 
@@ -262,13 +262,13 @@ Use existing variables and add these focused styles:
 }
 ```
 
-- [ ] **Step 5: Run the homepage test to verify GREEN**
+- [x] **Step 5: Run the homepage test to verify GREEN**
 
 Run: `node tests/homepage-smoke.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/homepage-smoke.test.mjs src/App.jsx src/styles.css

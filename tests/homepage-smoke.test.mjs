@@ -90,3 +90,8 @@ assert.ok(app.includes("from './lib/anime.esm.min.js'"), 'App should import loca
 assert.match(app, /IntersectionObserver/, 'App should use scroll observation');
 assert.match(app, /animate\(/, 'App should run Anime.js animations');
 assert.match(read('src/styles.css'), /prefers-reduced-motion/, 'CSS should respect reduced motion');
+assert.ok(app.includes('function TimelineItem'), 'timeline should use a focused item component');
+assert.ok(app.includes('slice(0, 2)'), 'timeline should show two child updates by default');
+assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');
+assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested visual branch');
+assert.match(read('src/styles.css'), /\.timeline-subupdate/);

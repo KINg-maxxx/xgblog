@@ -117,6 +117,59 @@ function SiteHeader() {
   );
 }
 
+function TimelineItem({ item, index }) {
+  const [expanded, setExpanded] = useState(false);
+  const updates = Array.isArray(item.updates) ? item.updates : [];
+  const visibleUpdates = expanded ? updates : updates.slice(0, 2);
+  const hiddenCount = Math.max(0, updates.length - 2);
+  const updatesId = `timeline-updates-${index}`;
+
+  return (
+    <div className={`timeline-item ${item.status === 'doing' ? 'is-doing' : ''}`}>
+      <span className="timeline-dot" aria-hidden="true" />
+      <div className="timeline-body">
+        <div className="timeline-meta">
+          <span className="timeline-period">{item.period}</span>
+          {item.status === 'doing' && <span className="timeline-badge">进行中</span>}
+        </div>
+        <h3>{item.title}</h3>
+        <p>{item.text}</p>
+      </div>
+
+      {updates.length > 0 && (
+        <div className="timeline-subupdates" id={updatesId}>
+          {visibleUpdates.map((update, updateIndex) => (
+            <article
+              className="timeline-subupdate"
+              key={`${update.date}-${update.title}-${updateIndex}`}
+            >
+              <span className="timeline-subdot" aria-hidden="true" />
+              <div>
+                {update.date && <time>{update.date}</time>}
+                <h4>{update.title}</h4>
+                {update.text && <p>{update.text}</p>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {hiddenCount > 0 && (
+        <button
+          className="timeline-toggle"
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={updatesId}
+          onClick={() => setExpanded(value => !value)}
+        >
+          {expanded ? '收起' : `展开其余 ${hiddenCount} 条`}
+          <span aria-hidden="true">⌄</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function HomePage() {
   return (
     <main id="top">
@@ -258,19 +311,9 @@ function HomePage() {
             text="按时间倒序记录我做过的内容和手头正在推进的事情，顶部是进行中的项目。"
           />
           <div className="timeline">
-            {timeline.map(item => (
+            {timeline.map((item, index) => (
               <AnimatedContent key={item.title} type="card" repeat>
-                <div className={`timeline-item ${item.status === 'doing' ? 'is-doing' : ''}`}>
-                  <span className="timeline-dot" aria-hidden="true" />
-                  <div className="timeline-body">
-                    <div className="timeline-meta">
-                      <span className="timeline-period">{item.period}</span>
-                      {item.status === 'doing' && <span className="timeline-badge">进行中</span>}
-                    </div>
-                    <h3>{item.title}</h3>
-                    <p>{item.text}</p>
-                  </div>
-                </div>
+                <TimelineItem item={item} index={index} />
               </AnimatedContent>
             ))}
           </div>
