@@ -8,6 +8,10 @@ import DotGrid from './react-bits/DotGrid.jsx';
 import SpotlightCard from './react-bits/SpotlightCard.jsx';
 import Feedback from './Feedback.jsx';
 import { getTimelineUpdateView } from './timeline.js';
+import AuthStatus from './AuthStatus.jsx';
+import { cleanOidcCallbackParameters } from './auth.js';
+
+cleanOidcCallbackParameters();
 
 export const POST_CATEGORIES = ['随笔', '技术专栏', '学术进度'];
 
@@ -106,12 +110,15 @@ function SiteHeader() {
           <span>WXG</span>
           <small>Tool Portal</small>
         </a>
-        <div className="nav-links">
-          {navItems.map(item => (
-            <a key={item.href} href={item.href}>
-              {item.label}
-            </a>
-          ))}
+        <div className="nav-actions">
+          <div className="nav-links">
+            {navItems.map(item => (
+              <a key={item.href} href={item.href}>
+                {item.label}
+              </a>
+            ))}
+          </div>
+          <AuthStatus />
         </div>
       </nav>
     </header>

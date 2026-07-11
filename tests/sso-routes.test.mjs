@@ -10,6 +10,7 @@ import { sealCookie, unsealCookie } from '../functions/_shared/sealed-cookie.js'
 const COOKIE_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
 const PACT_SSO_EXPIRES_AT_CLAIM = 'https://periopact.cn/claims/sso_expires_at';
 const env = {
+  SSO_ENABLED: '1',
   OIDC_ISSUER: 'https://www.periopact.cn/oidc',
   OIDC_COOKIE_KEY: COOKIE_KEY,
   BLOG_OIDC_CLIENT_SECRET: 'blog-secret',
@@ -20,17 +21,24 @@ function cookies(response) {
   return response.headers.getSetCookie?.() || [response.headers.get('Set-Cookie') || ''];
 }
 
-function request(url, cookie = '', traceId) {
-  const headers = new Headers();
+function request(url, cookie = '', traceId, init = {}) {
+  const headers = new Headers(init.headers);
   if (cookie) headers.set('Cookie', cookie);
   if (traceId) headers.set('X-Trace-Id', traceId);
-  return new Request(url, { headers });
+  return new Request(url, { ...init, headers });
 }
 
-function context(url, { cookie, oidc, logs = [], traceId = 'trace-test-000001' } = {}) {
+function context(url, {
+  cookie,
+  oidc,
+  logs = [],
+  traceId = 'trace-test-000001',
+  init,
+  envOverrides = {},
+} = {}) {
   return {
-    request: request(url, cookie, traceId),
-    env,
+    request: request(url, cookie, traceId, init),
+    env: { ...env, ...envOverrides },
     data: { oidc, log: entry => logs.push(entry), traceId },
   };
 }
@@ -300,11 +308,16 @@ test('session introspects opaque tokens and returns only the minimal identity an
   }));
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
+  const body = await response.json();
+  assert.deepEqual({ ...body, csrfToken: '<redacted>' }, {
     authenticated: true,
+    ssoEnabled: true,
     user: { id: 'user-1', name: 'Alice', picture: 'avatar-1' },
     permission: 'blog.access',
+    csrfToken: '<redacted>',
   });
+  assert.equal(typeof body.csrfToken, 'string');
+  assert.ok(body.csrfToken.length > 40);
 });
 
 test('session fails closed, clears the local cookie, and audits inactive tokens', async () => {
@@ -389,8 +402,20 @@ test('session clears a sealed cookie whose expiry exceeds the current PACT sessi
 test('logout clears host-only cookies, sends an RP-initiated logout request, and audits success', async () => {
   const logs = [];
   const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const sessionResponse = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie: `__Host-wxg_session=${sealed}`, oidc: oidcAdapter(),
+  }));
+  const { csrfToken } = await sessionResponse.json();
   const response = await logout(context('https://blog.periopact.cn/auth/logout', {
     cookie: `__Host-wxg_session=${sealed}`, oidc: oidcAdapter(), logs,
+    init: {
+      method: 'POST',
+      headers: {
+        Origin: 'https://blog.periopact.cn',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ csrfToken }),
+    },
   }));
   const location = new URL(response.headers.get('Location'));
   const setCookies = cookies(response).join('\n');
@@ -406,4 +431,72 @@ test('logout clears host-only cookies, sends an RP-initiated logout request, and
   assertAudit(logs, {
     traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'logout_completed', status: 302, reason: 'logout_started',
   });
+});
+
+test('logout rejects GET, cross-origin POST, and a CSRF token bound to another local session', async () => {
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const otherSealed = await sealCookie({ accessToken: 'other-token', idToken: 'other-id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const cookie = `__Host-wxg_session=${sealed}`;
+  const tokenResponse = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie, oidc: oidcAdapter(),
+  }));
+  const { csrfToken } = await tokenResponse.json();
+
+  const getResponse = await logout(context('https://blog.periopact.cn/auth/logout', { cookie, oidc: oidcAdapter() }));
+  const crossOrigin = await logout(context('https://blog.periopact.cn/auth/logout', {
+    cookie,
+    oidc: oidcAdapter(),
+    init: {
+      method: 'POST',
+      headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrfToken }),
+    },
+  }));
+  const otherSession = await logout(context('https://blog.periopact.cn/auth/logout', {
+    cookie: `__Host-wxg_session=${otherSealed}`,
+    oidc: oidcAdapter(),
+    init: {
+      method: 'POST',
+      headers: { Referer: 'https://blog.periopact.cn/', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrfToken }),
+    },
+  }));
+
+  assert.equal(getResponse.status, 405);
+  assert.equal(crossOrigin.status, 403);
+  assert.equal(otherSession.status, 403);
+  assert.equal(crossOrigin.headers.get('Set-Cookie'), null);
+  assert.equal(otherSession.headers.get('Set-Cookie'), null);
+});
+
+test('logout accepts a same-origin Referer and never clears cookies before configuration and CSRF validation', async () => {
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const cookie = `__Host-wxg_session=${sealed}`;
+  const tokenResponse = await session(context('https://blog.periopact.cn/api/auth/session', {
+    cookie, oidc: oidcAdapter(),
+  }));
+  const { csrfToken } = await tokenResponse.json();
+  const validReferer = await logout(context('https://blog.periopact.cn/auth/logout', {
+    cookie,
+    oidc: oidcAdapter(),
+    init: {
+      method: 'POST',
+      headers: { Referer: 'https://blog.periopact.cn/account', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrfToken }),
+    },
+  }));
+  const brokenConfiguration = await logout(context('https://blog.periopact.cn/auth/logout', {
+    cookie,
+    oidc: oidcAdapter(),
+    envOverrides: { OIDC_COOKIE_KEY: '' },
+    init: {
+      method: 'POST',
+      headers: { Origin: 'https://blog.periopact.cn', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrfToken }),
+    },
+  }));
+
+  assert.equal(validReferer.status, 302);
+  assert.equal(brokenConfiguration.status, 503);
+  assert.equal(brokenConfiguration.headers.get('Set-Cookie'), null);
 });

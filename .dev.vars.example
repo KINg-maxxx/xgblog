@@ -1,0 +1,5 @@
+SSO_ENABLED=0
+OIDC_ISSUER=https://www.periopact.cn/oidc
+OIDC_COOKIE_KEY=<base64url-encoded-32-byte-key>
+BLOG_OIDC_CLIENT_SECRET=<wxg-blog-client-secret>
+ANNOTATE_OIDC_CLIENT_SECRET=<wxg-annotate-client-secret>

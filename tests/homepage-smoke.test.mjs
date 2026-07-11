@@ -11,6 +11,8 @@ for (const file of [
   'index.html',
   'src/main.jsx',
   'src/App.jsx',
+  'src/AuthStatus.jsx',
+  'src/auth.js',
   'src/styles.css',
   'src/data/site.js',
   'src/data/posts.js',
@@ -27,6 +29,9 @@ for (const file of [
   'admin/admin.js',
   'blog/index.html',
   'blog/first-essay.html',
+  'functions/_middleware.js',
+  'functions/_shared/csrf.js',
+  '.dev.vars.example',
 ]) {
   assert.ok(exists(file), `${file} should exist`);
 }
@@ -43,6 +48,9 @@ assert.ok(packageJson.dependencies.react, 'React should be installed');
 assert.ok(packageJson.dependencies['react-dom'], 'React DOM should be installed');
 
 const app = read('src/App.jsx');
+const authStatus = read('src/AuthStatus.jsx');
+const auth = read('src/auth.js');
+const workbench = read('public/tools/annotation-workbench.html');
 const postsData = read('src/data/posts.js');
 const adminHtml = read('admin/index.html');
 const adminJs = read('admin/admin.js');
@@ -99,6 +107,21 @@ assert.match(app, /IntersectionObserver/, 'App should use scroll observation');
 assert.match(app, /animate\(/, 'App should run Anime.js animations');
 assert.match(read('src/styles.css'), /prefers-reduced-motion/, 'CSS should respect reduced motion');
 assert.ok(app.includes('function TimelineItem'), 'timeline should use a focused item component');
+assert.ok(app.includes('<AuthStatus'), 'site header should include the fixed-size PACT identity control');
+assert.ok(
+  app.indexOf('cleanOidcCallbackParameters()') < app.indexOf('export default function App'),
+  'OIDC callback parameters should be cleaned before React renders',
+);
+for (const state of ['loading', 'anonymous', 'authenticated', 'denied', 'unavailable']) {
+  assert.ok(authStatus.includes(`'${state}'`), `identity control should render the ${state} state`);
+}
+assert.ok(auth.includes("form.method = 'post'"), 'global logout should submit a POST navigation');
+assert.ok(auth.includes("form.action = '/auth/logout'"), 'global logout should use the same-origin Function');
+assert.match(read('src/styles.css'), /\.auth-status\s*\{[^}]*width:/s, 'identity control should reserve a stable width');
+assert.match(read('src/styles.css'), /\.auth-status\s*\{[^}]*height:/s, 'identity control should reserve a stable height');
+assert.ok(workbench.includes('60_000'), 'annotation workbench should heartbeat every 60 seconds');
+assert.ok(workbench.includes("visibilitychange"), 'annotation workbench should recheck auth when visible');
+assert.ok(workbench.includes("setAttribute('inert', '')"), 'expired auth should lock every workbench surface');
 assert.ok(app.includes('getTimelineUpdateView'), 'timeline should use tested display-state logic');
 assert.ok(app.includes('updateIndex >= visibleCount'), 'timeline should collapse updates after the preview');
 assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');

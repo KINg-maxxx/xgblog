@@ -1630,6 +1630,48 @@
 })();
 </script>
 
+<style id="sso-lock-style">
+    #ssoAuthLock {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: rgba(247,248,250,.88);
+        backdrop-filter: blur(18px) saturate(1.1);
+        -webkit-backdrop-filter: blur(18px) saturate(1.1);
+    }
+    .sso-auth-lock-dialog {
+        width: min(390px, 100%);
+        padding: 24px;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        background: #fff;
+        color: #111827;
+        text-align: center;
+        box-shadow: 0 18px 54px rgba(15,23,42,.14);
+    }
+    .sso-auth-lock-dialog h2 { margin: 0; font-size: 20px; line-height: 28px; letter-spacing: 0; }
+    .sso-auth-lock-dialog p { margin: 8px 0 18px; color: #6b7280; font-size: 14px; line-height: 22px; }
+    .sso-auth-lock-actions { display: flex; justify-content: center; gap: 8px; }
+    .sso-auth-lock-actions a,
+    .sso-auth-lock-actions button {
+        min-height: 38px;
+        padding: 0 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #fff;
+        color: #111827;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .sso-auth-lock-actions a { display: inline-flex; align-items: center; background: #111827; color: #fff; border-color: #111827; }
+</style>
+
 </head>
 <body>
 <header>
@@ -5695,6 +5737,112 @@ function bootstrapWorkbench() {
         document.addEventListener('DOMContentLoaded', boot, { once: true });
     } else {
         boot();
+    }
+})();
+</script>
+
+<script id="sso-workbench-heartbeat">
+(function protectAnnotationWorkbench() {
+    const HEARTBEAT_MS = 60_000;
+    const LOCK_ID = 'ssoAuthLock';
+    let checkInFlight = null;
+    let heartbeat = null;
+    let lockObserver = null;
+    let ssoDisabled = false;
+
+    function setWorkbenchInert(locked) {
+        Array.from(document.body.children).forEach(element => {
+            if (element.id === LOCK_ID) return;
+            if (locked && !element.hasAttribute('inert')) {
+                element.dataset.ssoInertAdded = 'true';
+                element.setAttribute('inert', '');
+            } else if (!locked && element.dataset.ssoInertAdded === 'true') {
+                element.removeAttribute('inert');
+                delete element.dataset.ssoInertAdded;
+            }
+        });
+    }
+
+    function lockCopy(status) {
+        if (status === 403) return ['未获工作台授权', '当前 PACT 账户没有标注工作台访问权限。'];
+        if (status === 503) return ['身份服务暂不可用', '为保护工作内容，工作台已暂停操作，请稍后重新检查。'];
+        return ['登录已失效', 'PACT 会话已过期或退出，请重新登录后继续。'];
+    }
+
+    function lockWorkbench(status) {
+        let lock = document.getElementById(LOCK_ID);
+        if (!lock) {
+            lock = document.createElement('div');
+            lock.id = LOCK_ID;
+            lock.setAttribute('role', 'alertdialog');
+            lock.setAttribute('aria-modal', 'true');
+            lock.innerHTML = '<div class="sso-auth-lock-dialog"><h2></h2><p></p><div class="sso-auth-lock-actions"><button type="button">重新检查</button><a href="/auth/login?returnTo=%2Ftools%2Fannotation-workbench.html">登录 PACT</a></div></div>';
+            lock.querySelector('button').addEventListener('click', checkSession);
+            document.body.appendChild(lock);
+        }
+        const [title, message] = lockCopy(status);
+        lock.querySelector('h2').textContent = title;
+        lock.querySelector('p').textContent = message;
+        setWorkbenchInert(true);
+        if (!lockObserver) {
+            lockObserver = new MutationObserver(() => setWorkbenchInert(true));
+            lockObserver.observe(document.body, { childList: true });
+        }
+        lock.querySelector('button').focus();
+    }
+
+    function unlockWorkbench() {
+        lockObserver?.disconnect();
+        lockObserver = null;
+        document.getElementById(LOCK_ID)?.remove();
+        setWorkbenchInert(false);
+    }
+
+    async function checkSession() {
+        if (ssoDisabled) return;
+        if (checkInFlight) return checkInFlight;
+        checkInFlight = (async () => {
+            try {
+                const response = await fetch('/api/auth/session', {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: { Accept: 'application/json' }
+                });
+                const body = await response.json();
+                if (response.status === 200 && body.ssoEnabled === false) {
+                    ssoDisabled = true;
+                    clearInterval(heartbeat);
+                    unlockWorkbench();
+                    return;
+                }
+                if (response.status === 200 && body.authenticated === true) {
+                    unlockWorkbench();
+                    return;
+                }
+                lockWorkbench(response.status === 403 ? 403 : response.status === 503 ? 503 : 401);
+            } catch (error) {
+                lockWorkbench(503);
+            }
+        })();
+        try {
+            await checkInFlight;
+        } finally {
+            checkInFlight = null;
+        }
+    }
+
+    function bootAuthHeartbeat() {
+        checkSession();
+        heartbeat = setInterval(checkSession, HEARTBEAT_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkSession();
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootAuthHeartbeat, { once: true });
+    } else {
+        bootAuthHeartbeat();
     }
 })();
 </script>
