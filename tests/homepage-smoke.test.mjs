@@ -12,6 +12,7 @@ for (const file of [
   'src/main.jsx',
   'src/App.jsx',
   'src/analytics.js',
+  'src/routes.js',
   'src/AuthStatus.jsx',
   'src/auth.js',
   'src/styles.css',
@@ -91,7 +92,7 @@ for (const component of ['BlurText', 'AnimatedContent', 'SpotlightCard', 'DotGri
 }
 
 assert.ok(app.includes("from './data/posts.js'"), 'App should load posts from Markdown data');
-assert.ok(app.includes('URLSearchParams'), 'App should read ?post= slug');
+assert.ok(app.includes("from './routes.js'"), 'App should use the tested Cloudflare-compatible route parser');
 assert.ok(postsData.includes('import.meta.glob'), 'posts data should load Markdown files with Vite');
 assert.ok(postsData.includes('?raw'), 'posts data should import Markdown as raw text');
 assert.match(firstPost, /^---\n/, 'first post should start with frontmatter');

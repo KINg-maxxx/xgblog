@@ -9,21 +9,9 @@ import SpotlightCard from './react-bits/SpotlightCard.jsx';
 import Feedback from './Feedback.jsx';
 import { getTimelineUpdateView } from './timeline.js';
 import AuthStatus from './AuthStatus.jsx';
+import { routeFromLocation } from './routes.js';
 
 export const POST_CATEGORIES = ['随笔', '技术专栏', '学术进度'];
-
-// blog/first-essay.html 是固定链接，必须始终指向这篇文章，而不是 posts 排序后的第一项
-const FIRST_ESSAY_SLUG = '2026-07-05-第一篇随笔';
-
-function routeFromLocation(location) {
-  const selectedSlug = new URLSearchParams(location.search).get('post');
-  if (location.pathname.endsWith('/blog/first-essay.html')) {
-    return { page: 'essay', slug: FIRST_ESSAY_SLUG };
-  }
-  if (selectedSlug) return { page: 'essay', slug: selectedSlug };
-  if (location.pathname.includes('/blog/')) return { page: 'blog' };
-  return { page: 'home' };
-}
 
 export default function App() {
   const route = useMemo(() => routeFromLocation(window.location), []);
