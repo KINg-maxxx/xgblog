@@ -9,3 +9,7 @@ compatibility_date = "2026-01-01"
 [[kv_namespaces]]
 binding = "COMMENTS"
 id = "5bb28b1e8d2444b8a21cadf34ff3d0ce"
+
+[[services]]
+binding = "PACT_OIDC"
+service = "pact-private-origin"

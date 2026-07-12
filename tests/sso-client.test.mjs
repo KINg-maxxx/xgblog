@@ -5,6 +5,7 @@ import {
   getSiteConfig,
   validateReturnTo,
 } from '../functions/_shared/sso-config.js';
+import { oidcFor } from '../functions/_shared/oidc-client.js';
 import { sealCookie, unsealCookie } from '../functions/_shared/sealed-cookie.js';
 
 const COOKIE_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
@@ -72,4 +73,21 @@ test('seals cookie payloads as tamper-evident JWE', async () => {
   assert.notEqual(sealed, JSON.stringify(payload));
   assert.deepEqual(await unsealCookie(sealed, COOKIE_KEY), payload);
   await assert.rejects(() => unsealCookie(`x${sealed.slice(1)}`, COOKIE_KEY));
+});
+
+test('routes provider requests through the private Worker binding', async () => {
+  let forwarded;
+  const adapter = oidcFor({
+    env: {
+      PACT_OIDC: {
+        fetch: async (request) => {
+          forwarded = request;
+          return new Response('{}');
+        },
+      },
+    },
+  });
+
+  await adapter.providerFetch(new Request('https://www.periopact.cn/oidc/.well-known/openid-configuration'));
+  assert.equal(forwarded.url, 'https://www.periopact.cn/oidc/.well-known/openid-configuration');
 });

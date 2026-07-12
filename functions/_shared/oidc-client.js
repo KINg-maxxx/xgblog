@@ -32,11 +32,16 @@ function adapterFor(context) {
 async function discover(config, oidc) {
   const auth = oidc.ClientSecretBasic ? oidc.ClientSecretBasic(config.clientSecret) : undefined;
   try {
-    return await oidc.discovery(new URL(config.issuer), config.clientId, {
+    const options = oidc.providerFetch && oidc.customFetch
+      ? { [oidc.customFetch]: oidc.providerFetch }
+      : undefined;
+    const configuration = await oidc.discovery(new URL(config.issuer), config.clientId, {
       redirect_uris: [config.callbackUri],
       response_types: ['code'],
       token_endpoint_auth_method: 'client_secret_basic',
-    }, auth);
+    }, auth, options);
+    if (options) configuration[oidc.customFetch] = oidc.providerFetch;
+    return configuration;
   } catch {
     throw new OidcProviderUnavailableError();
   }
@@ -183,5 +188,11 @@ export function currentSessionCookie(request) {
 }
 
 export function oidcFor(context) {
-  return adapterFor(context);
+  const adapter = adapterFor(context);
+  const binding = context.env?.PACT_OIDC;
+  if (adapter !== standardOidc || typeof binding?.fetch !== 'function') return adapter;
+  return {
+    ...standardOidc,
+    providerFetch: (resource, options) => binding.fetch(resource, options),
+  };
 }
