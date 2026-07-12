@@ -33,6 +33,24 @@ test('maps each exact xgblog host to its confidential client', () => {
   );
 });
 
+test('pins the OIDC issuer to the exact shared first-party endpoint', () => {
+  const request = new Request('https://blog.periopact.cn/auth/login');
+  assert.equal(getSiteConfig(request, env).issuer, 'https://www.periopact.cn/oidc');
+
+  for (const issuer of [
+    'https://attacker.example/oidc',
+    'https://www.periopact.cn/oidc/',
+    'https://www.periopact.cn/oidc?tenant=other',
+    'http://www.periopact.cn/oidc',
+  ]) {
+    assert.throws(
+      () => getSiteConfig(request, { ...env, OIDC_ISSUER: issuer }),
+      /OIDC issuer must be exactly https:\/\/www\.periopact\.cn\/oidc/,
+      issuer,
+    );
+  }
+});
+
 test('only accepts exact relative return paths for the selected site', () => {
   const blog = getSiteConfig(new Request('https://blog.periopact.cn/auth/login'), env);
   assert.equal(validateReturnTo('/', blog), '/');

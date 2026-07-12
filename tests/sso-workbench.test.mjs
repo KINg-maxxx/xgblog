@@ -70,6 +70,7 @@ function createGate() {
 function createHeartbeatHarness(initialFetch) {
   const elements = new Map();
   const listeners = new Map();
+  const windowListeners = new Map();
   const timeouts = new Map();
   const intervals = new Map();
   const gate = createGate();
@@ -160,7 +161,12 @@ function createHeartbeatHarness(initialFetch) {
       return elements.get(id) || null;
     },
   };
-  const window = { __workbenchAuthGate: gate.api };
+  const window = {
+    __workbenchAuthGate: gate.api,
+    addEventListener(type, listener) {
+      windowListeners.set(type, listener);
+    },
+  };
   const context = {
     AbortController,
     DOMException,
@@ -214,12 +220,23 @@ function createHeartbeatHarness(initialFetch) {
     setFetch(nextFetch) {
       fetchImpl = nextFetch;
     },
+    showPage(persisted) {
+      const listener = windowListeners.get('pageshow');
+      assert.ok(listener, 'the heartbeat should listen for pageshow');
+      listener({ persisted });
+    },
     start() {
       const listener = listeners.get('DOMContentLoaded');
       assert.ok(listener, 'the heartbeat should wait for DOMContentLoaded');
       listener();
     },
     timeouts,
+    visible() {
+      document.visibilityState = 'visible';
+      const listener = listeners.get('visibilitychange');
+      assert.ok(listener, 'the heartbeat should listen for visibility changes');
+      listener();
+    },
   };
 }
 
@@ -271,6 +288,77 @@ test('heartbeat cadence includes the network timeout within a 60-second lock dea
     heartbeatMs + timeoutMs <= 60_000,
     `heartbeat ${heartbeatMs}ms plus timeout ${timeoutMs}ms exceeds the lock deadline`,
   );
+});
+
+test('visibility return locks synchronously before the resumed session probe settles', async () => {
+  const resumed = deferred();
+  let calls = 0;
+  const harness = createHeartbeatHarness(() => {
+    calls += 1;
+    if (calls === 1) {
+      return Promise.resolve(jsonResponse(200, {
+        authenticated: true,
+        permission: 'annotate.access',
+        ssoEnabled: true,
+      }));
+    }
+    return resumed.promise;
+  });
+
+  harness.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
+  const unlockedGeneration = harness.gate.generation();
+
+  harness.visible();
+
+  assert.equal(harness.gate.isLocked(), true);
+  assert.equal(harness.gate.api.allows(unlockedGeneration), false);
+  resumed.resolve(jsonResponse(200, {
+    authenticated: true,
+    permission: 'annotate.access',
+    ssoEnabled: true,
+  }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
+});
+
+test('bfcache pageshow locks synchronously while an ordinary pageshow does not duplicate the boot probe', async () => {
+  const resumed = deferred();
+  let calls = 0;
+  const harness = createHeartbeatHarness(() => {
+    calls += 1;
+    if (calls === 1) {
+      return Promise.resolve(jsonResponse(200, {
+        authenticated: true,
+        permission: 'annotate.access',
+        ssoEnabled: true,
+      }));
+    }
+    return resumed.promise;
+  });
+
+  harness.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
+  const unlockedGeneration = harness.gate.generation();
+
+  harness.showPage(false);
+  assert.equal(calls, 1);
+  assert.equal(harness.gate.isLocked(), false);
+
+  harness.showPage(true);
+
+  assert.equal(calls, 2);
+  assert.equal(harness.gate.isLocked(), true);
+  assert.equal(harness.gate.api.allows(unlockedGeneration), false);
+  resumed.resolve(jsonResponse(200, {
+    authenticated: true,
+    permission: 'annotate.access',
+    ssoEnabled: true,
+  }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
 });
 
 test('an SSO-disabled response does not hide a later re-enable from the workbench', async () => {

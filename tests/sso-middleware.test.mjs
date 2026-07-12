@@ -81,12 +81,50 @@ test('blog content remains public and never introspects an anonymous request', a
   assert.equal(oidc.introspections(), 0);
 });
 
-test('workbench aliases on production and alternate hosts redirect to the canonical annotation entry', async () => {
+test('enabled SSO redirects the Pages production alias to the canonical blog before auth handling', async () => {
+  const paths = [
+    '/',
+    '/blog/first-essay?from=pages&mode=read',
+    '/api/auth/session?refresh=1',
+    '/tools/annotation-workbench?case=P0001',
+  ];
+
+  for (const path of paths) {
+    const oidc = oidcAdapter();
+    const probe = makeContext(`https://xgblog.pages.dev${path}`, { oidc });
+
+    const response = await middleware(probe.context);
+
+    assert.equal(response.status, 308, path);
+    assert.equal(response.headers.get('Location'), `https://blog.periopact.cn${path}`, path);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store', path);
+    assert.equal(probe.nextCalls(), 0, path);
+    assert.equal(oidc.introspections(), 0, path);
+  }
+});
+
+test('disabled SSO leaves the entire Pages production alias public for rollback', async () => {
+  for (const path of ['/', '/api/auth/session?refresh=1', '/tools/annotation-workbench?case=P0001']) {
+    const oidc = oidcAdapter();
+    const probe = makeContext(`https://xgblog.pages.dev${path}`, {
+      envOverrides: { SSO_ENABLED: '0' },
+      oidc,
+    });
+
+    const response = await middleware(probe.context);
+
+    assert.equal(response.status, 200, path);
+    assert.equal(await response.text(), 'next', path);
+    assert.equal(probe.nextCalls(), 1, path);
+    assert.equal(probe.nextRequest(), undefined, path);
+    assert.equal(oidc.introspections(), 0, path);
+  }
+});
+
+test('workbench aliases on the canonical blog and alternate hosts redirect to the annotation entry', async () => {
   const cases = [
     ['blog.periopact.cn', '/tools/annotation-workbench.html'],
     ['blog.periopact.cn', '/tools/annotation-workbench'],
-    ['xgblog.pages.dev', '/%74ools/annotation-workbench.html'],
-    ['xgblog.pages.dev', '/%74ools/annotation-workbench'],
     ['preview.example', '/tools/%61nnotation-workbench.html'],
     ['preview.example', '/tools/%61nnotation-workbench'],
     ['preview.example', '/tools/annotation-workbench%2ehtml'],

@@ -10,6 +10,7 @@ import { onRequest as session } from '../functions/api/auth/session.js';
 import { sealCookie, unsealCookie } from '../functions/_shared/sealed-cookie.js';
 
 const COOKIE_KEY = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
+const MAX_BROWSER_COOKIE_BYTES = 4096;
 const PACT_SSO_EXPIRES_AT_CLAIM = 'https://periopact.cn/claims/sso_expires_at';
 const env = {
   SSO_ENABLED: '1',
@@ -175,6 +176,50 @@ test('callback derives sealed-session and cookie expiry from PACT absolute SSO e
   assert.ok(stored.expiresAt <= expiresAtSeconds * 1000);
   assert.ok(stored.expiresAt > Date.now());
   assert.ok(maxAge <= Math.floor((expiresAtSeconds * 1000 - Date.now()) / 1000));
+});
+
+test('callback bounds the complete browser session cookie', async () => {
+  const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+  const transactionCookie = cookies(loginResponse)[0].split(';')[0];
+  const response = await callback(context(
+    'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+    { cookie: transactionCookie, oidc: oidcAdapter() },
+  ));
+  const sessionCookie = cookies(response).find(value => value.startsWith('__Host-wxg_session='));
+
+  assert.equal(response.status, 302);
+  assert.ok(sessionCookie);
+  assert.ok(
+    new TextEncoder().encode(sessionCookie).byteLength <= MAX_BROWSER_COOKIE_BYTES,
+    'the complete Set-Cookie value must fit practical browser limits',
+  );
+});
+
+test('callback rejects oversized access and ID tokens without redirecting or retaining the transaction', async () => {
+  for (const field of ['access_token', 'id_token']) {
+    const logs = [];
+    const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
+    const transactionCookie = cookies(loginResponse)[0].split(';')[0];
+    const tokenResponse = {
+      access_token: 'access-token',
+      id_token: 'id-token',
+      [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(),
+      [field]: 'x'.repeat(MAX_BROWSER_COOKIE_BYTES),
+    };
+    const response = await callback(context(
+      'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+      { cookie: transactionCookie, oidc: oidcAdapter({ tokenResponse }), logs },
+    ));
+    const setCookies = cookies(response).join('\n');
+
+    assert.equal(response.status, 503, field);
+    assert.equal(response.headers.get('Location'), null, field);
+    assert.doesNotMatch(setCookies, /__Host-wxg_session=/, field);
+    assert.match(setCookies, /__Host-wxg_sso_tx=;[^\n]*Max-Age=0/, field);
+    assertAudit(logs, {
+      traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_unavailable', status: 503, reason: 'session_cookie_too_large',
+    });
+  }
 });
 
 test('callback fails closed when PACT absolute expiry evidence is absent or invalid', async () => {

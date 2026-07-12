@@ -5954,12 +5954,20 @@ function bootstrapWorkbench() {
 
     window.__ssoWorkbenchAuth = Object.freeze({ checkSession });
 
+    function revalidateResumedSession() {
+        lockWorkbench('checking');
+        checkSession();
+    }
+
     function bootAuthHeartbeat() {
         lockWorkbench('checking');
         checkSession();
         setInterval(checkSession, HEARTBEAT_MS);
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') checkSession();
+            if (document.visibilityState === 'visible') revalidateResumedSession();
+        });
+        window.addEventListener('pageshow', event => {
+            if (event.persisted) revalidateResumedSession();
         });
         document.addEventListener('fullscreenchange', () => {
             if (!window.__workbenchAuthGate?.allows() && document.fullscreenElement && document.exitFullscreen) {

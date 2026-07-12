@@ -18,6 +18,7 @@ const SITES = {
     secretName: 'ANNOTATE_OIDC_CLIENT_SECRET',
   },
 };
+const EXPECTED_OIDC_ISSUER = 'https://www.periopact.cn/oidc';
 
 // PACT MUST return this numeric Unix-seconds value in both its token response and
 // RFC 7662 introspection response. It is the earlier of the PACT session and OIDC grant expiry.
@@ -32,7 +33,9 @@ export function getSiteConfig(request, env) {
   const clientSecret = env[site.secretName];
   const cookieKey = env.OIDC_COOKIE_KEY;
   if (!issuer || !clientSecret || !cookieKey) throw new Error('SSO is not configured');
-  if (new URL(issuer).protocol !== 'https:') throw new Error('SSO issuer must use HTTPS');
+  if (issuer !== EXPECTED_OIDC_ISSUER) {
+    throw new Error(`OIDC issuer must be exactly ${EXPECTED_OIDC_ISSUER}`);
+  }
 
   return { ...site, issuer, clientSecret, cookieKey, origin: `https://${host}` };
 }

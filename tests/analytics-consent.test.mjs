@@ -4,6 +4,7 @@ import test from 'node:test';
 import * as analytics from '../src/analytics.js';
 
 const CONSENT_KEY = 'wxg_analytics_consent';
+const GA_DISABLE_KEY = `ga-disable-${analytics.GOOGLE_ANALYTICS_ID}`;
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -82,6 +83,52 @@ test('allow analytics persists consent and loads the GA script and config exactl
     probe.windowRef.dataLayer.filter(entry => Array.from(entry)[0] === 'config').length,
     1,
   );
+});
+
+test('persisted denial sets the standard GA disable flag and never loads GA', () => {
+  const probe = harness('blog.periopact.cn', 'denied');
+
+  assert.equal(analytics.initializeAnalytics(probe), false);
+
+  assert.equal(probe.windowRef[GA_DISABLE_KEY], true);
+  assert.equal(probe.scripts.length, 0);
+  assert.equal(probe.windowRef.dataLayer, undefined);
+  assert.equal(probe.windowRef.gtag, undefined);
+});
+
+test('grant clears the standard GA disable flag before initialization', () => {
+  const probe = harness('blog.periopact.cn');
+  probe.windowRef[GA_DISABLE_KEY] = true;
+  let disabledAtScriptLoad;
+  const appendChild = probe.documentRef.head.appendChild;
+  probe.documentRef.head.appendChild = element => {
+    disabledAtScriptLoad = probe.windowRef[GA_DISABLE_KEY];
+    appendChild(element);
+  };
+
+  assert.equal(analytics.setAnalyticsConsent('granted', probe), true);
+
+  assert.equal(disabledAtScriptLoad, false);
+  assert.equal(probe.windowRef[GA_DISABLE_KEY], false);
+  assert.equal(probe.scripts.length, 1);
+});
+
+test('revoking granted consent disables GA before dispatching its consent update', () => {
+  const probe = harness('blog.periopact.cn', 'granted');
+  assert.equal(analytics.initializeAnalytics(probe), true);
+  const updates = [];
+  probe.windowRef.gtag = (...args) => {
+    updates.push({ args, disabled: probe.windowRef[GA_DISABLE_KEY] });
+  };
+
+  assert.equal(analytics.setAnalyticsConsent('denied', probe), true);
+
+  assert.equal(probe.windowRef[GA_DISABLE_KEY], true);
+  assert.deepEqual(updates, [{
+    args: ['consent', 'update', { analytics_storage: 'denied' }],
+    disabled: true,
+  }]);
+  assert.equal(probe.scripts.length, 1);
 });
 
 test('necessary-only consent persists without loading GA, including when storage is unavailable', () => {

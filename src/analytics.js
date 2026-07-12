@@ -1,5 +1,6 @@
 export const GOOGLE_ANALYTICS_ID = 'G-4MT03MBVYL';
 const ANALYTICS_CONSENT_KEY = 'wxg_analytics_consent';
+const GA_DISABLE_KEY = `ga-disable-${GOOGLE_ANALYTICS_ID}`;
 const PRODUCTION_HOSTS = new Set(['xgblog.pages.dev', 'blog.periopact.cn']);
 const CONSENT_CHOICES = new Set(['granted', 'denied']);
 
@@ -23,10 +24,12 @@ export function getAnalyticsConsent({ windowRef = window, storageRef } = {}) {
 
 export function initializeAnalytics({ documentRef = document, windowRef = window, storageRef } = {}) {
   const hostname = windowRef.location?.hostname?.toLowerCase();
+  const consent = getAnalyticsConsent({ windowRef, storageRef });
+  windowRef[GA_DISABLE_KEY] = consent !== 'granted';
   if (
     windowRef.location?.protocol !== 'https:'
     || !PRODUCTION_HOSTS.has(hostname)
-    || getAnalyticsConsent({ windowRef, storageRef }) !== 'granted'
+    || consent !== 'granted'
     || windowRef.__wxgAnalyticsInitialized
   ) return false;
 
@@ -50,6 +53,7 @@ export function setAnalyticsConsent(choice, options = {}) {
   if (!CONSENT_CHOICES.has(choice)) return false;
   const windowRef = options.windowRef || window;
   const storage = storageFor(windowRef, options.storageRef);
+  if (choice === 'denied') windowRef[GA_DISABLE_KEY] = true;
   try {
     storage?.setItem(ANALYTICS_CONSENT_KEY, choice);
     if (storage?.getItem(ANALYTICS_CONSENT_KEY) !== choice) return false;
@@ -57,6 +61,7 @@ export function setAnalyticsConsent(choice, options = {}) {
     return false;
   }
 
+  if (choice === 'granted') windowRef[GA_DISABLE_KEY] = false;
   if (windowRef.__wxgAnalyticsInitialized) {
     windowRef.gtag?.('consent', 'update', { analytics_storage: choice });
   } else if (choice === 'granted') {

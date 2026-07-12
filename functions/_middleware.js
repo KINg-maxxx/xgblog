@@ -2,6 +2,8 @@ import { readSession } from './_shared/oidc-client.js';
 import { clearCookie } from './_shared/sealed-cookie.js';
 
 const ANNOTATION_HOST = 'annotate.periopact.cn';
+const BLOG_HOST = 'blog.periopact.cn';
+const PAGES_HOST = 'xgblog.pages.dev';
 const WORKBENCH_PATH = '/tools/annotation-workbench.html';
 const WORKBENCH_PATHS = new Set([WORKBENCH_PATH, '/tools/annotation-workbench']);
 const SESSION_COOKIE = '__Host-wxg_session';
@@ -35,6 +37,13 @@ function nextRequest(context, url) {
   return context.next(new Request(url, context.request));
 }
 
+function permanentRedirect(location) {
+  return new Response(null, {
+    status: 308,
+    headers: { Location: location, 'Cache-Control': 'no-store' },
+  });
+}
+
 function failure(state) {
   const headers = new Headers({
     'Cache-Control': 'no-store',
@@ -50,14 +59,13 @@ function failure(state) {
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const host = url.hostname.toLowerCase();
+  const enabled = ssoEnabled(context.env);
+  if (host === PAGES_HOST) {
+    if (!enabled) return context.next();
+    return permanentRedirect(`https://${BLOG_HOST}${url.pathname}${url.search}`);
+  }
   if (isWorkbenchPath(url.pathname) && host !== ANNOTATION_HOST) {
-    return new Response(null, {
-      status: 308,
-      headers: {
-        Location: `https://${ANNOTATION_HOST}/`,
-        'Cache-Control': 'no-store',
-      },
-    });
+    return permanentRedirect(`https://${ANNOTATION_HOST}/`);
   }
   if (host !== ANNOTATION_HOST) return context.next();
 
@@ -65,7 +73,7 @@ export async function onRequest(context) {
     ? new URL(`${WORKBENCH_PATH}${url.search}${url.hash}`, url)
     : null;
 
-  if (!ssoEnabled(context.env)) return nextRequest(context, rewritten);
+  if (!enabled) return nextRequest(context, rewritten);
   if (PUBLIC_AUTH_PATHS.has(url.pathname)) return context.next();
 
   const state = await readSession(context);

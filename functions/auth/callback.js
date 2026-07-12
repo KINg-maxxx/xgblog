@@ -11,6 +11,7 @@ import { clearCookie, readCookie, sealCookie, secureCookie, unsealCookie } from 
 
 const SESSION_COOKIE = '__Host-wxg_session';
 const TRANSACTION_COOKIE = '__Host-wxg_sso_tx';
+const MAX_COOKIE_BYTES = 4096;
 
 function rejectCallback(reason) {
   throw new OidcCallbackRejectedError(reason);
@@ -32,9 +33,13 @@ export async function onRequest(context) {
     const sessionCookie = await sealCookie(session, config.cookieKey);
     const maxAge = Math.floor((session.expiresAt - Date.now()) / 1000);
     if (maxAge <= 0) throw new OidcProviderUnavailableError('invalid_expiry_evidence');
+    const serializedSessionCookie = secureCookie(SESSION_COOKIE, sessionCookie, maxAge);
+    if (new TextEncoder().encode(serializedSessionCookie).byteLength > MAX_COOKIE_BYTES) {
+      throw new OidcProviderUnavailableError('session_cookie_too_large');
+    }
     auditSsoEvent(context, config, 'callback_completed', 302, 'authorized');
     const headers = new Headers({ Location: new URL(transaction.returnTo, config.origin).href });
-    headers.append('Set-Cookie', secureCookie(SESSION_COOKIE, sessionCookie, maxAge));
+    headers.append('Set-Cookie', serializedSessionCookie);
     headers.append('Set-Cookie', clearCookie(TRANSACTION_COOKIE));
     return new Response(null, { status: 302, headers });
   } catch (error) {
