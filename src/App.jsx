@@ -9,9 +9,6 @@ import SpotlightCard from './react-bits/SpotlightCard.jsx';
 import Feedback from './Feedback.jsx';
 import { getTimelineUpdateView } from './timeline.js';
 import AuthStatus from './AuthStatus.jsx';
-import { cleanOidcCallbackParameters } from './auth.js';
-
-cleanOidcCallbackParameters();
 
 export const POST_CATEGORIES = ['随笔', '技术专栏', '学术进度'];
 

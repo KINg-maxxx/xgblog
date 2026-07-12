@@ -11,6 +11,7 @@ for (const file of [
   'index.html',
   'src/main.jsx',
   'src/App.jsx',
+  'src/analytics.js',
   'src/AuthStatus.jsx',
   'src/auth.js',
   'src/styles.css',
@@ -47,7 +48,9 @@ assert.ok(packageJson.scripts.build.includes('vite build'));
 assert.ok(packageJson.dependencies.react, 'React should be installed');
 assert.ok(packageJson.dependencies['react-dom'], 'React DOM should be installed');
 
+const main = read('src/main.jsx');
 const app = read('src/App.jsx');
+const analytics = read('src/analytics.js');
 const authStatus = read('src/AuthStatus.jsx');
 const auth = read('src/auth.js');
 const workbench = read('public/tools/annotation-workbench.html');
@@ -109,8 +112,12 @@ assert.match(read('src/styles.css'), /prefers-reduced-motion/, 'CSS should respe
 assert.ok(app.includes('function TimelineItem'), 'timeline should use a focused item component');
 assert.ok(app.includes('<AuthStatus'), 'site header should include the fixed-size PACT identity control');
 assert.ok(
-  app.indexOf('cleanOidcCallbackParameters()') < app.indexOf('export default function App'),
-  'OIDC callback parameters should be cleaned before React renders',
+  main.indexOf('cleanOidcCallbackParameters()') < main.indexOf('initializeAnalytics()'),
+  'OIDC callback parameters should be cleaned before Google Analytics initializes',
+);
+assert.ok(
+  main.indexOf('initializeAnalytics()') < main.indexOf('createRoot('),
+  'Google Analytics should initialize before React renders',
 );
 for (const state of ['loading', 'anonymous', 'authenticated', 'denied', 'unavailable']) {
   assert.ok(authStatus.includes(`'${state}'`), `identity control should render the ${state} state`);
@@ -123,6 +130,10 @@ assert.ok(workbench.includes('60_000'), 'annotation workbench should heartbeat e
 assert.ok(workbench.includes("visibilitychange"), 'annotation workbench should recheck auth when visible');
 assert.ok(workbench.includes("setAttribute('inert', '')"), 'expired auth should lock every workbench surface');
 assert.ok(app.includes('getTimelineUpdateView'), 'timeline should use tested display-state logic');
+assert.match(analytics, /GOOGLE_ANALYTICS_ID = ['"]G-4MT03MBVYL['"]/, 'Google Analytics should use the production stream');
+assert.match(analytics, /googletagmanager\.com\/gtag\/js\?id=/, 'Google Analytics loader should use gtag.js');
+assert.match(analytics, /gtag\(['"]config['"],\s*GOOGLE_ANALYTICS_ID\)/, 'Google Analytics should configure the production stream');
+assert.match(analytics, /protocol !== ['"]https:['"]/, 'local HTTP development should not pollute production analytics');
 assert.ok(app.includes('updateIndex >= visibleCount'), 'timeline should collapse updates after the preview');
 assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');
 assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested visual branch');
