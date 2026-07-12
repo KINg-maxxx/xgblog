@@ -5954,8 +5954,15 @@ function bootstrapWorkbench() {
 
     window.__ssoWorkbenchAuth = Object.freeze({ checkSession });
 
-    function revalidateResumedSession() {
+    function suspendSessionValidation() {
+        probeGeneration += 1;
+        activeController?.abort();
+        activeController = null;
         lockWorkbench('checking');
+    }
+
+    function revalidateResumedSession() {
+        suspendSessionValidation();
         checkSession();
     }
 
@@ -5965,10 +5972,13 @@ function bootstrapWorkbench() {
         setInterval(checkSession, HEARTBEAT_MS);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') revalidateResumedSession();
+            else suspendSessionValidation();
         });
+        window.addEventListener('pagehide', suspendSessionValidation);
         window.addEventListener('pageshow', event => {
             if (event.persisted) revalidateResumedSession();
         });
+        document.addEventListener('freeze', suspendSessionValidation);
         document.addEventListener('fullscreenchange', () => {
             if (!window.__workbenchAuthGate?.allows() && document.fullscreenElement && document.exitFullscreen) {
                 try { document.exitFullscreen().catch(() => {}); } catch (error) {}

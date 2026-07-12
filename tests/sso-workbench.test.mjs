@@ -225,6 +225,22 @@ function createHeartbeatHarness(initialFetch) {
       assert.ok(listener, 'the heartbeat should listen for pageshow');
       listener({ persisted });
     },
+    hidePage() {
+      const listener = windowListeners.get('pagehide');
+      assert.ok(listener, 'the heartbeat should listen for pagehide');
+      listener();
+    },
+    freeze() {
+      const listener = listeners.get('freeze');
+      assert.ok(listener, 'the heartbeat should listen for freeze');
+      listener();
+    },
+    hidden() {
+      document.visibilityState = 'hidden';
+      const listener = listeners.get('visibilitychange');
+      assert.ok(listener, 'the heartbeat should listen for visibility changes');
+      listener();
+    },
     start() {
       const listener = listeners.get('DOMContentLoaded');
       assert.ok(listener, 'the heartbeat should wait for DOMContentLoaded');
@@ -321,6 +337,39 @@ test('visibility return locks synchronously before the resumed session probe set
   }));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(harness.gate.isLocked(), false);
+});
+
+test('browser lifecycle loss locks synchronously and a stale probe cannot unlock in the background', async () => {
+  const stale = deferred();
+  const harness = createHeartbeatHarness(async () => jsonResponse(200, {
+    authenticated: true,
+    permission: 'annotate.access',
+    ssoEnabled: true,
+  }));
+
+  harness.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
+
+  harness.setFetch(() => stale.promise);
+  const staleProbe = harness.api().checkSession();
+  harness.hidden();
+  assert.equal(harness.gate.isLocked(), true);
+
+  stale.resolve(jsonResponse(200, {
+    authenticated: true,
+    permission: 'annotate.access',
+    ssoEnabled: true,
+  }));
+  await staleProbe;
+  assert.equal(harness.gate.isLocked(), true);
+
+  harness.gate.api.unlock();
+  harness.hidePage();
+  assert.equal(harness.gate.isLocked(), true);
+  harness.gate.api.unlock();
+  harness.freeze();
+  assert.equal(harness.gate.isLocked(), true);
 });
 
 test('bfcache pageshow locks synchronously while an ordinary pageshow does not duplicate the boot probe', async () => {
