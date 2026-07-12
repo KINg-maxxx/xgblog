@@ -144,12 +144,12 @@ test('workbench aliases on the canonical blog and alternate hosts redirect to th
   }
 });
 
-test('annotation-host workbench aliases are protected and rewritten to the canonical asset', async () => {
+test('annotation-host noncanonical aliases redirect to the Cloudflare extensionless path before auth', async () => {
   const cookie = await activeCookie();
   const cases = [
-    '/tools/annotation-workbench',
     '/%74ools/annotation-workbench',
     '/tools/%61nnotation-workbench',
+    '/tools/annotation-workbench.html',
     '/tools/annotation-workbench%2ehtml',
   ];
 
@@ -159,10 +159,26 @@ test('annotation-host workbench aliases are protected and rewritten to the canon
 
     const response = await middleware(probe.context);
 
-    assert.equal(response.status, 200, path);
-    assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html', path);
-    assert.equal(oidc.introspections(), 1, path);
+    assert.equal(response.status, 308, path);
+    assert.equal(response.headers.get('Location'), 'https://annotate.periopact.cn/tools/annotation-workbench?case=P0001', path);
+    assert.equal(probe.nextCalls(), 0, path);
+    assert.equal(oidc.introspections(), 0, path);
   }
+});
+
+test('the canonical annotation path authenticates once and reaches the static asset without a rewrite', async () => {
+  const oidc = oidcAdapter();
+  const probe = makeContext('https://annotate.periopact.cn/tools/annotation-workbench?case=P0001', {
+    cookie: await activeCookie(),
+    oidc,
+  });
+
+  const response = await middleware(probe.context);
+
+  assert.equal(response.status, 200);
+  assert.equal(probe.nextCalls(), 1);
+  assert.equal(probe.nextRequest(), undefined);
+  assert.equal(oidc.introspections(), 1);
 });
 
 test('disabled SSO keeps the annotation workbench public while preserving the host rewrite', async () => {
@@ -176,7 +192,7 @@ test('disabled SSO keeps the annotation workbench public while preserving the ho
   const rewritten = new URL(probe.nextRequest().url);
 
   assert.equal(response.status, 200);
-  assert.equal(rewritten.pathname, '/tools/annotation-workbench.html');
+  assert.equal(rewritten.pathname, '/tools/annotation-workbench');
   assert.equal(oidc.introspections(), 0);
 });
 
@@ -190,7 +206,7 @@ test('disabled SSO still canonicalizes the Cloudflare extensionless annotation r
   const response = await middleware(probe.context);
 
   assert.equal(response.status, 200);
-  assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html');
+  assert.equal(probe.nextRequest(), undefined);
   assert.equal(oidc.introspections(), 0);
 });
 
@@ -201,7 +217,7 @@ test('annotation entry redirects an anonymous request to login without looping a
   assert.equal(response.status, 302);
   assert.equal(
     response.headers.get('Location'),
-    'https://annotate.periopact.cn/auth/login?returnTo=%2Ftools%2Fannotation-workbench.html',
+    'https://annotate.periopact.cn/auth/login?returnTo=%2Ftools%2Fannotation-workbench',
   );
   assert.equal(entry.nextCalls(), 0);
 
@@ -220,7 +236,7 @@ test('authorized annotation entry introspects once and rewrites root to the work
   const response = await middleware(probe.context);
 
   assert.equal(response.status, 200);
-  assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html');
+  assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench');
   assert.equal(oidc.introspections(), 1);
 });
 
@@ -245,7 +261,7 @@ test('annotation fails closed on revoked access and identity-provider outages', 
     cookie,
     oidc: oidcAdapter({ access: 'blog.access' }),
   });
-  const unavailable = makeContext('https://annotate.periopact.cn/%74ools/annotation-workbench', {
+  const unavailable = makeContext('https://annotate.periopact.cn/tools/annotation-workbench', {
     cookie,
     oidc: oidcAdapter({ outage: true }),
   });

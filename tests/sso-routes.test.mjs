@@ -551,7 +551,7 @@ test('annotation logout uses PACT registered root redirect and root rewrites to 
   assert.equal(logoutResponse.status, 302);
   assert.equal(logoutLocation.searchParams.get('post_logout_redirect_uri'), 'https://annotate.periopact.cn/');
   assert.equal(rootResponse.status, 200);
-  assert.equal(new URL(rewrittenRequest.url).pathname, '/tools/annotation-workbench.html');
+  assert.equal(new URL(rewrittenRequest.url).pathname, '/tools/annotation-workbench');
 });
 
 test('logout rejects GET, cross-origin POST, and a CSRF token bound to another local session', async () => {

@@ -5,7 +5,7 @@ const SITES = {
     callbackUri: 'https://blog.periopact.cn/auth/callback',
     postLogoutUri: 'https://blog.periopact.cn/',
     defaultReturnTo: '/',
-    returnPaths: ['/', '/blog/', '/tools/annotation-workbench.html'],
+    returnPaths: ['/', '/blog/', '/tools/annotation-workbench'],
     secretName: 'BLOG_OIDC_CLIENT_SECRET',
   },
   'annotate.periopact.cn': {
@@ -13,8 +13,8 @@ const SITES = {
     permission: 'annotate.access',
     callbackUri: 'https://annotate.periopact.cn/auth/callback',
     postLogoutUri: 'https://annotate.periopact.cn/',
-    defaultReturnTo: '/tools/annotation-workbench.html',
-    returnPaths: ['/', '/tools/annotation-workbench.html'],
+    defaultReturnTo: '/tools/annotation-workbench',
+    returnPaths: ['/', '/tools/annotation-workbench'],
     secretName: 'ANNOTATE_OIDC_CLIENT_SECRET',
   },
 };

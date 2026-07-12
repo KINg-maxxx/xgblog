@@ -209,6 +209,11 @@ function createHeartbeatHarness(initialFetch) {
       assert.ok(entry, 'a heartbeat interval should be scheduled');
       return entry.ms;
     },
+    runHeartbeat() {
+      const entry = intervals.values().next().value;
+      assert.ok(entry, 'a heartbeat interval should be scheduled');
+      return entry.callback();
+    },
     runNextTimeout() {
       const entry = timeouts.entries().next().value;
       assert.ok(entry, 'a timeout should be scheduled');
@@ -369,6 +374,30 @@ test('browser lifecycle loss locks synchronously and a stale probe cannot unlock
   assert.equal(harness.gate.isLocked(), true);
   harness.gate.api.unlock();
   harness.freeze();
+  assert.equal(harness.gate.isLocked(), true);
+});
+
+test('the periodic heartbeat does not probe or unlock while the page is hidden', async () => {
+  let calls = 0;
+  const harness = createHeartbeatHarness(async () => {
+    calls += 1;
+    return jsonResponse(200, {
+      authenticated: true,
+      permission: 'annotate.access',
+      ssoEnabled: true,
+    });
+  });
+
+  harness.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(harness.gate.isLocked(), false);
+  assert.equal(calls, 1);
+
+  harness.hidden();
+  harness.runHeartbeat();
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(calls, 1);
   assert.equal(harness.gate.isLocked(), true);
 });
 

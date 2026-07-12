@@ -5887,7 +5887,7 @@ function bootstrapWorkbench() {
             lock.id = LOCK_ID;
             lock.setAttribute('role', 'alertdialog');
             lock.setAttribute('aria-modal', 'true');
-            lock.innerHTML = '<div class="sso-auth-lock-dialog"><h2></h2><p></p><div class="sso-auth-lock-actions"><button type="button">重新检查</button><a href="/auth/login?returnTo=%2Ftools%2Fannotation-workbench.html">登录 PACT</a></div></div>';
+            lock.innerHTML = '<div class="sso-auth-lock-dialog"><h2></h2><p></p><div class="sso-auth-lock-actions"><button type="button">重新检查</button><a href="/auth/login?returnTo=%2Ftools%2Fannotation-workbench">登录 PACT</a></div></div>';
             lock.querySelector('button').addEventListener('click', checkSession);
             document.body.appendChild(lock);
         }
@@ -5969,7 +5969,9 @@ function bootstrapWorkbench() {
     function bootAuthHeartbeat() {
         lockWorkbench('checking');
         checkSession();
-        setInterval(checkSession, HEARTBEAT_MS);
+        setInterval(() => {
+            if (document.visibilityState === 'visible') checkSession();
+        }, HEARTBEAT_MS);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') revalidateResumedSession();
             else suspendSessionValidation();

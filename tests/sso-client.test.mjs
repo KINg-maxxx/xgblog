@@ -58,6 +58,11 @@ test('only accepts exact relative return paths for the selected site', () => {
   assert.equal(validateReturnTo('https://attacker.example/', blog), '/');
   assert.equal(validateReturnTo('//attacker.example/', blog), '/');
   assert.equal(validateReturnTo('/blog/?next=https://attacker.example/', blog), '/');
+
+  const annotation = getSiteConfig(new Request('https://annotate.periopact.cn/auth/login'), env);
+  assert.equal(annotation.defaultReturnTo, '/tools/annotation-workbench');
+  assert.equal(validateReturnTo('/tools/annotation-workbench', annotation), '/tools/annotation-workbench');
+  assert.equal(validateReturnTo('/tools/annotation-workbench.html', annotation), '/tools/annotation-workbench');
 });
 
 test('seals cookie payloads as tamper-evident JWE', async () => {

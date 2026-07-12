@@ -4,8 +4,8 @@ import { clearCookie } from './_shared/sealed-cookie.js';
 const ANNOTATION_HOST = 'annotate.periopact.cn';
 const BLOG_HOST = 'blog.periopact.cn';
 const PAGES_HOST = 'xgblog.pages.dev';
-const WORKBENCH_PATH = '/tools/annotation-workbench.html';
-const WORKBENCH_PATHS = new Set([WORKBENCH_PATH, '/tools/annotation-workbench']);
+const WORKBENCH_PATH = '/tools/annotation-workbench';
+const WORKBENCH_PATHS = new Set([WORKBENCH_PATH, `${WORKBENCH_PATH}.html`]);
 const SESSION_COOKIE = '__Host-wxg_session';
 const PUBLIC_AUTH_PATHS = new Set([
   '/auth/login',
@@ -69,7 +69,11 @@ export async function onRequest(context) {
   }
   if (host !== ANNOTATION_HOST) return context.next();
 
-  const rewritten = url.pathname === '/' || (isWorkbenchPath(url.pathname) && url.pathname !== WORKBENCH_PATH)
+  if (isWorkbenchPath(url.pathname) && url.pathname !== WORKBENCH_PATH) {
+    return permanentRedirect(`https://${ANNOTATION_HOST}${WORKBENCH_PATH}${url.search}`);
+  }
+
+  const rewritten = url.pathname === '/'
     ? new URL(`${WORKBENCH_PATH}${url.search}${url.hash}`, url)
     : null;
 
