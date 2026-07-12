@@ -1527,11 +1527,148 @@ button.btn {
 .site-footer {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 16px;
   padding: 30px 0 44px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.site-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.analytics-settings-trigger {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.analytics-settings-trigger:hover {
+  color: var(--red);
+}
+
+.analytics-settings-trigger:focus-visible,
+.analytics-consent-panel button:focus-visible {
+  outline: 2px solid rgba(35, 95, 167, 0.55);
+  outline-offset: 3px;
+}
+
+.analytics-consent-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 60;
+  width: min(640px, calc(100% - 28px));
+  min-height: 112px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 253, 250, 0.97);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-align: left;
+}
+
+.analytics-consent-copy {
+  min-width: 0;
+}
+
+.analytics-consent-copy > span {
+  display: block;
+  color: var(--red);
+  font-family: var(--font-kai-medium);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.analytics-consent-copy h2 {
+  margin: 1px 0 3px;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.analytics-consent-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.analytics-consent-copy .analytics-consent-error {
+  margin-top: 4px;
+  color: var(--red);
+}
+
+.analytics-consent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analytics-consent-actions button {
+  min-width: 118px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-kai-medium);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.analytics-consent-actions button:hover {
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.analytics-consent-actions .analytics-consent-allow {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-soft);
+}
+
+.analytics-consent-actions .analytics-consent-allow:hover {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+.analytics-consent-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.analytics-consent-close:hover {
+  color: var(--ink);
 }
 
 /* ---------- 中等字重统一走 Medium 字体族 ---------- */
@@ -1707,7 +1844,24 @@ button.btn {
   }
 
   .site-footer {
+    align-items: flex-start;
     flex-direction: column;
+  }
+
+  .site-footer-links {
+    justify-content: flex-start;
+  }
+
+  .analytics-consent-panel {
+    bottom: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .analytics-consent-actions button {
+    min-width: 0;
   }
 }
 

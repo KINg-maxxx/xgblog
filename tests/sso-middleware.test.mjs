@@ -81,11 +81,14 @@ test('blog content remains public and never introspects an anonymous request', a
   assert.equal(oidc.introspections(), 0);
 });
 
-test('workbench assets on the blog or any alternate host redirect to the canonical annotation entry', async () => {
+test('workbench aliases on production and alternate hosts redirect to the canonical annotation entry', async () => {
   const cases = [
     ['blog.periopact.cn', '/tools/annotation-workbench.html'],
+    ['blog.periopact.cn', '/tools/annotation-workbench'],
     ['xgblog.pages.dev', '/%74ools/annotation-workbench.html'],
+    ['xgblog.pages.dev', '/%74ools/annotation-workbench'],
     ['preview.example', '/tools/%61nnotation-workbench.html'],
+    ['preview.example', '/tools/%61nnotation-workbench'],
     ['preview.example', '/tools/annotation-workbench%2ehtml'],
   ];
   for (const [host, path] of cases) {
@@ -103,6 +106,27 @@ test('workbench assets on the blog or any alternate host redirect to the canonic
   }
 });
 
+test('annotation-host workbench aliases are protected and rewritten to the canonical asset', async () => {
+  const cookie = await activeCookie();
+  const cases = [
+    '/tools/annotation-workbench',
+    '/%74ools/annotation-workbench',
+    '/tools/%61nnotation-workbench',
+    '/tools/annotation-workbench%2ehtml',
+  ];
+
+  for (const path of cases) {
+    const oidc = oidcAdapter();
+    const probe = makeContext(`https://annotate.periopact.cn${path}?case=P0001`, { cookie, oidc });
+
+    const response = await middleware(probe.context);
+
+    assert.equal(response.status, 200, path);
+    assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html', path);
+    assert.equal(oidc.introspections(), 1, path);
+  }
+});
+
 test('disabled SSO keeps the annotation workbench public while preserving the host rewrite', async () => {
   const oidc = oidcAdapter();
   const probe = makeContext('https://annotate.periopact.cn/', {
@@ -115,6 +139,20 @@ test('disabled SSO keeps the annotation workbench public while preserving the ho
 
   assert.equal(response.status, 200);
   assert.equal(rewritten.pathname, '/tools/annotation-workbench.html');
+  assert.equal(oidc.introspections(), 0);
+});
+
+test('disabled SSO still canonicalizes the Cloudflare extensionless annotation route', async () => {
+  const oidc = oidcAdapter();
+  const probe = makeContext('https://annotate.periopact.cn/tools/annotation-workbench', {
+    envOverrides: { SSO_ENABLED: '0' },
+    oidc,
+  });
+
+  const response = await middleware(probe.context);
+
+  assert.equal(response.status, 200);
+  assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html');
   assert.equal(oidc.introspections(), 0);
 });
 
@@ -165,11 +203,11 @@ test('a blog-only session cannot enter the annotation root', async () => {
 
 test('annotation fails closed on revoked access and identity-provider outages', async () => {
   const cookie = await activeCookie();
-  const denied = makeContext('https://annotate.periopact.cn/tools/annotation-workbench.html', {
+  const denied = makeContext('https://annotate.periopact.cn/tools/annotation-workbench', {
     cookie,
     oidc: oidcAdapter({ access: 'blog.access' }),
   });
-  const unavailable = makeContext('https://annotate.periopact.cn/tools/annotation-workbench.html', {
+  const unavailable = makeContext('https://annotate.periopact.cn/%74ools/annotation-workbench', {
     cookie,
     oidc: oidcAdapter({ outage: true }),
   });

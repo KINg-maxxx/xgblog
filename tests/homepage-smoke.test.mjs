@@ -52,6 +52,7 @@ assert.ok(packageJson.dependencies['react-dom'], 'React DOM should be installed'
 const main = read('src/main.jsx');
 const app = read('src/App.jsx');
 const analytics = read('src/analytics.js');
+const analyticsConsent = exists('src/AnalyticsConsent.jsx') ? read('src/AnalyticsConsent.jsx') : '';
 const authStatus = read('src/AuthStatus.jsx');
 const auth = read('src/auth.js');
 const workbench = read('public/tools/annotation-workbench.html');
@@ -135,6 +136,14 @@ assert.match(analytics, /GOOGLE_ANALYTICS_ID = ['"]G-4MT03MBVYL['"]/, 'Google An
 assert.match(analytics, /googletagmanager\.com\/gtag\/js\?id=/, 'Google Analytics loader should use gtag.js');
 assert.match(analytics, /gtag\(['"]config['"],\s*GOOGLE_ANALYTICS_ID\)/, 'Google Analytics should configure the production stream');
 assert.match(analytics, /protocol !== ['"]https:['"]/, 'local HTTP development should not pollute production analytics');
+assert.ok(analyticsConsent, 'site should include a reopenable analytics consent control');
+assert.ok(app.includes('<AnalyticsConsent'), 'site footer should render analytics settings');
+assert.match(analyticsConsent, /Allow analytics/);
+assert.match(analyticsConsent, /Necessary only/);
+assert.match(analyticsConsent, /Analytics settings/);
+assert.match(analyticsConsent, /aria-controls=/, 'analytics settings trigger should expose its controlled panel');
+assert.match(analyticsConsent, /setAnalyticsConsent/, 'analytics choices should use the tested consent API');
+assert.match(read('src/styles.css'), /\.analytics-consent-panel/, 'analytics consent should have a dedicated responsive surface');
 assert.ok(app.includes('updateIndex >= visibleCount'), 'timeline should collapse updates after the preview');
 assert.ok(app.includes('aria-expanded'), 'timeline expansion control should expose its state');
 assert.ok(app.includes('timeline-subupdates'), 'timeline should render a nested visual branch');

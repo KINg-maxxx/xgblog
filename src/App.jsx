@@ -9,6 +9,7 @@ import SpotlightCard from './react-bits/SpotlightCard.jsx';
 import Feedback from './Feedback.jsx';
 import { getTimelineUpdateView } from './timeline.js';
 import AuthStatus from './AuthStatus.jsx';
+import AnalyticsConsent from './AnalyticsConsent.jsx';
 import { routeFromLocation } from './routes.js';
 
 export const POST_CATEGORIES = ['随笔', '技术专栏', '学术进度'];
@@ -536,8 +537,11 @@ function SiteFooter() {
   return (
     <footer className="shell site-footer">
       <span>© 2026 WXG · 工具入口 / 博客 / 简历</span>
-      <a href="/#tools">回到网站入口</a>
-      {import.meta.env.DEV && <a href="/admin">后台</a>}
+      <div className="site-footer-links">
+        <a href="/#tools">回到网站入口</a>
+        <AnalyticsConsent />
+        {import.meta.env.DEV && <a href="/admin">后台</a>}
+      </div>
     </footer>
   );
 }

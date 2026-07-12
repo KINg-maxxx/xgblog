@@ -6,6 +6,10 @@ import { readCookie, unsealCookie } from './sealed-cookie.js';
 
 const SESSION_COOKIE = '__Host-wxg_session';
 const APP_ACCESS_CLAIM = 'https://periopact.cn/claims/app_access';
+const REJECTED_CALLBACK_CODES = new Set([
+  'OAUTH_INVALID_RESPONSE',
+  'OAUTH_JWT_CLAIM_COMPARISON_FAILED',
+]);
 
 export class OidcCallbackRejectedError extends Error {
   constructor(reason = 'invalid_callback') {
@@ -52,7 +56,8 @@ function absolutePactExpiry(response) {
 
 function isRejectedCallbackError(error) {
   return error?.name === 'AuthorizationResponseError'
-    || (error?.name === 'ResponseBodyError' && error.status >= 400 && error.status < 500);
+    || (error?.name === 'ResponseBodyError' && error.status >= 400 && error.status < 500)
+    || (error?.name === 'ClientError' && REJECTED_CALLBACK_CODES.has(error.code));
 }
 
 export function isOidcProviderUnavailable(error) {

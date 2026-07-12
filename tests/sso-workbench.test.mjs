@@ -198,6 +198,11 @@ function createHeartbeatHarness(initialFetch) {
   return {
     api: () => window.__ssoWorkbenchAuth,
     gate,
+    heartbeatMs() {
+      const entry = intervals.values().next().value;
+      assert.ok(entry, 'a heartbeat interval should be scheduled');
+      return entry.ms;
+    },
     runNextTimeout() {
       const entry = timeouts.entries().next().value;
       assert.ok(entry, 'a timeout should be scheduled');
@@ -208,6 +213,11 @@ function createHeartbeatHarness(initialFetch) {
     },
     setFetch(nextFetch) {
       fetchImpl = nextFetch;
+    },
+    start() {
+      const listener = listeners.get('DOMContentLoaded');
+      assert.ok(listener, 'the heartbeat should wait for DOMContentLoaded');
+      listener();
     },
     timeouts,
   };
@@ -247,6 +257,63 @@ test('a hanging session probe times out, locks closed, and cannot occupy the nex
 
   assert.equal(calls, 2);
   assert.equal(harness.gate.isLocked(), false);
+});
+
+test('heartbeat cadence includes the network timeout within a 60-second lock deadline', async () => {
+  const harness = createHeartbeatHarness(() => new Promise(() => {}));
+
+  harness.start();
+  const heartbeatMs = harness.heartbeatMs();
+  const timeoutMs = harness.runNextTimeout();
+  await Promise.resolve();
+
+  assert.ok(
+    heartbeatMs + timeoutMs <= 60_000,
+    `heartbeat ${heartbeatMs}ms plus timeout ${timeoutMs}ms exceeds the lock deadline`,
+  );
+});
+
+test('an SSO-disabled response does not hide a later re-enable from the workbench', async () => {
+  let calls = 0;
+  const harness = createHeartbeatHarness(async () => {
+    calls += 1;
+    if (calls === 1) return jsonResponse(200, { authenticated: false, ssoEnabled: false });
+    return jsonResponse(401, { authenticated: false, ssoEnabled: true });
+  });
+  const api = harness.api();
+
+  await api.checkSession();
+  assert.equal(harness.gate.isLocked(), false);
+
+  await api.checkSession();
+
+  assert.equal(calls, 2);
+  assert.equal(harness.gate.isLocked(), true);
+});
+
+test('a stale successful probe cannot unlock a newer denied session', async () => {
+  const staleSuccess = deferred();
+  let calls = 0;
+  const harness = createHeartbeatHarness(() => {
+    calls += 1;
+    if (calls === 1) return staleSuccess.promise;
+    return Promise.resolve(jsonResponse(401, { authenticated: false, ssoEnabled: true }));
+  });
+  const api = harness.api();
+
+  const staleProbe = api.checkSession();
+  await api.checkSession();
+  assert.equal(harness.gate.isLocked(), true);
+
+  staleSuccess.resolve(jsonResponse(200, {
+    authenticated: true,
+    permission: 'annotate.access',
+    ssoEnabled: true,
+  }));
+  await staleProbe;
+
+  assert.equal(harness.gate.isLocked(), true);
+  assert.equal(harness.gate.unlockCalls(), 0);
 });
 
 test('only the latest session-probe generation may change the workbench lock', async () => {

@@ -12,7 +12,7 @@ const SITES = {
     clientId: 'wxg-annotate',
     permission: 'annotate.access',
     callbackUri: 'https://annotate.periopact.cn/auth/callback',
-    postLogoutUri: 'https://annotate.periopact.cn/tools/annotation-workbench.html',
+    postLogoutUri: 'https://annotate.periopact.cn/',
     defaultReturnTo: '/tools/annotation-workbench.html',
     returnPaths: ['/', '/tools/annotation-workbench.html'],
     secretName: 'ANNOTATE_OIDC_CLIENT_SECRET',

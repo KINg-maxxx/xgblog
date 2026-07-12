@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ClientError } from 'openid-client';
 
 import { onRequest as login } from '../functions/auth/login.js';
 import { onRequest as callback } from '../functions/auth/callback.js';
 import { onRequest as logout } from '../functions/auth/logout.js';
+import { onRequest as middleware } from '../functions/_middleware.js';
 import { onRequest as session } from '../functions/api/auth/session.js';
 import { sealCookie, unsealCookie } from '../functions/_shared/sealed-cookie.js';
 
@@ -55,7 +57,12 @@ function responseError(status, error) {
   return failure;
 }
 
-function oidcAdapter({ discoveryOutage = false, introspectionOutage = false, tokenResponse } = {}) {
+function oidcAdapter({
+  discoveryOutage = false,
+  introspectionOutage = false,
+  permission = 'blog.access',
+  tokenResponse,
+} = {}) {
   return {
     randomState: () => 'state-value',
     randomNonce: () => 'nonce-value',
@@ -85,7 +92,7 @@ function oidcAdapter({ discoveryOutage = false, introspectionOutage = false, tok
         sub: 'user-1',
         name: 'Alice',
         picture: 'avatar-1',
-        'https://periopact.cn/claims/app_access': 'blog.access',
+        'https://periopact.cn/claims/app_access': permission,
         [PACT_SSO_EXPIRES_AT_CLAIM]: pactExpiry(),
       };
     },
@@ -260,6 +267,35 @@ test('callback returns 400 and audits rejected callback material separately from
   });
 });
 
+test('real openid-client validation ClientErrors reject the callback instead of reporting an outage', async () => {
+  const cases = [
+    ['state', 'OAUTH_INVALID_RESPONSE'],
+    ['nonce', 'OAUTH_JWT_CLAIM_COMPARISON_FAILED'],
+  ];
+
+  for (const [check, code] of cases) {
+    const logs = [];
+    const transaction = await sealCookie({
+      state: 'state-value', nonce: 'nonce-value', verifier: 'pkce-verifier', returnTo: '/', expiresAt: Date.now() + 60_000,
+    }, COOKIE_KEY);
+    const adapter = {
+      ...oidcAdapter(),
+      authorizationCodeGrant: async () => {
+        throw new ClientError(`invalid ${check} response`, { code });
+      },
+    };
+    const response = await callback(context(
+      'https://blog.periopact.cn/auth/callback?code=authorization-code&state=state-value',
+      { cookie: `__Host-wxg_sso_tx=${transaction}`, oidc: adapter, logs },
+    ));
+
+    assert.equal(response.status, 400, check);
+    assertAudit(logs, {
+      traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'callback_rejected', status: 400, reason: 'invalid_callback',
+    });
+  }
+});
+
 test('discovery and token endpoint outages return 503 rather than rejected callback status', async () => {
   const logs = [];
   const loginResponse = await login(context('https://blog.periopact.cn/auth/login', { oidc: oidcAdapter() }));
@@ -431,6 +467,46 @@ test('logout clears host-only cookies, sends an RP-initiated logout request, and
   assertAudit(logs, {
     traceId: 'trace-test-000001', clientId: 'wxg-blog', event: 'logout_completed', status: 302, reason: 'logout_started',
   });
+});
+
+test('annotation logout uses PACT registered root redirect and root rewrites to the workbench', async () => {
+  const adapter = oidcAdapter({ permission: 'annotate.access' });
+  const sealed = await sealCookie({ accessToken: 'access-token', idToken: 'id-token', expiresAt: Date.now() + 60_000 }, COOKIE_KEY);
+  const cookie = `__Host-wxg_session=${sealed}`;
+  const sessionResponse = await session(context('https://annotate.periopact.cn/api/auth/session', {
+    cookie,
+    oidc: adapter,
+  }));
+  const { csrfToken } = await sessionResponse.json();
+  const logoutResponse = await logout(context('https://annotate.periopact.cn/auth/logout', {
+    cookie,
+    oidc: adapter,
+    init: {
+      method: 'POST',
+      headers: {
+        Origin: 'https://annotate.periopact.cn',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ csrfToken }),
+    },
+  }));
+  const logoutLocation = new URL(logoutResponse.headers.get('Location'));
+
+  let rewrittenRequest;
+  const rootResponse = await middleware({
+    request: request('https://annotate.periopact.cn/', cookie),
+    env,
+    data: { oidc: adapter, log: () => {} },
+    next: async input => {
+      rewrittenRequest = input;
+      return new Response('next');
+    },
+  });
+
+  assert.equal(logoutResponse.status, 302);
+  assert.equal(logoutLocation.searchParams.get('post_logout_redirect_uri'), 'https://annotate.periopact.cn/');
+  assert.equal(rootResponse.status, 200);
+  assert.equal(new URL(rewrittenRequest.url).pathname, '/tools/annotation-workbench.html');
 });
 
 test('logout rejects GET, cross-origin POST, and a CSRF token bound to another local session', async () => {

@@ -3,6 +3,7 @@ import { clearCookie } from './_shared/sealed-cookie.js';
 
 const ANNOTATION_HOST = 'annotate.periopact.cn';
 const WORKBENCH_PATH = '/tools/annotation-workbench.html';
+const WORKBENCH_PATHS = new Set([WORKBENCH_PATH, '/tools/annotation-workbench']);
 const SESSION_COOKIE = '__Host-wxg_session';
 const PUBLIC_AUTH_PATHS = new Set([
   '/auth/login',
@@ -17,7 +18,13 @@ function ssoEnabled(env) {
 
 function isWorkbenchPath(pathname) {
   try {
-    return decodeURIComponent(pathname) === WORKBENCH_PATH;
+    let decoded = pathname;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
+    return WORKBENCH_PATHS.has(decoded);
   } catch {
     return false;
   }
@@ -54,7 +61,7 @@ export async function onRequest(context) {
   }
   if (host !== ANNOTATION_HOST) return context.next();
 
-  const rewritten = url.pathname === '/'
+  const rewritten = url.pathname === '/' || (isWorkbenchPath(url.pathname) && url.pathname !== WORKBENCH_PATH)
     ? new URL(`${WORKBENCH_PATH}${url.search}${url.hash}`, url)
     : null;
 
