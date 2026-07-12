@@ -77,7 +77,7 @@ export const toolSites = [
   },
   {
     name: '标注工作台',
-    url: '/tools/annotation-workbench.html',
+    url: 'https://annotate.periopact.cn/',
     label: '数据标注',
     tagline: '多模态口腔文字标注工作台',
     audience: '口内照、CBCT、口扫、咬合分析标注',

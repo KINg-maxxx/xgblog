@@ -81,6 +81,28 @@ test('blog content remains public and never introspects an anonymous request', a
   assert.equal(oidc.introspections(), 0);
 });
 
+test('workbench assets on the blog or any alternate host redirect to the canonical annotation entry', async () => {
+  const cases = [
+    ['blog.periopact.cn', '/tools/annotation-workbench.html'],
+    ['xgblog.pages.dev', '/%74ools/annotation-workbench.html'],
+    ['preview.example', '/tools/%61nnotation-workbench.html'],
+    ['preview.example', '/tools/annotation-workbench%2ehtml'],
+  ];
+  for (const [host, path] of cases) {
+    const label = `${host}${path}`;
+    const oidc = oidcAdapter();
+    const probe = makeContext(`https://${host}${path}?case=P0001`, { oidc });
+
+    const response = await middleware(probe.context);
+
+    assert.equal(response.status, 308, label);
+    assert.equal(response.headers.get('Location'), 'https://annotate.periopact.cn/', label);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store', label);
+    assert.equal(probe.nextCalls(), 0, label);
+    assert.equal(oidc.introspections(), 0, label);
+  }
+});
+
 test('disabled SSO keeps the annotation workbench public while preserving the host rewrite', async () => {
   const oidc = oidcAdapter();
   const probe = makeContext('https://annotate.periopact.cn/', {
@@ -124,6 +146,21 @@ test('authorized annotation entry introspects once and rewrites root to the work
   assert.equal(response.status, 200);
   assert.equal(new URL(probe.nextRequest().url).pathname, '/tools/annotation-workbench.html');
   assert.equal(oidc.introspections(), 1);
+});
+
+test('a blog-only session cannot enter the annotation root', async () => {
+  const oidc = oidcAdapter({ access: 'blog.access' });
+  const probe = makeContext('https://annotate.periopact.cn/', {
+    cookie: await activeCookie(),
+    oidc,
+  });
+
+  const response = await middleware(probe.context);
+
+  assert.equal(response.status, 403);
+  assert.equal(probe.nextCalls(), 0);
+  assert.equal(oidc.introspections(), 1);
+  assert.match(response.headers.get('Set-Cookie'), /__Host-wxg_session=;.*Max-Age=0/);
 });
 
 test('annotation fails closed on revoked access and identity-provider outages', async () => {

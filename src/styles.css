@@ -1615,11 +1615,7 @@ button.btn {
   }
 }
 
-@media (max-width: 620px) {
-  .shell {
-    width: min(100% - 28px, 1160px);
-  }
-
+@media (max-width: 780px) {
   .nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1650,6 +1646,12 @@ button.btn {
 
   .nav-links a {
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 620px) {
+  .shell {
+    width: min(100% - 28px, 1160px);
   }
 
   .hero-subtitle {

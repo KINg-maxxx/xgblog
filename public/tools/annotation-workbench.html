@@ -2219,6 +2219,46 @@ let annotationFilter = "all";
 let annotationGroupMode = "time";
 let negativeTemplateMarks = new Set();
 
+const workbenchAuthGate = (() => {
+    let generation = 0;
+    let locked = true;
+    return Object.freeze({
+        allows(token) {
+            return !locked && (token === undefined || token === generation);
+        },
+        capture() {
+            return generation;
+        },
+        lock() {
+            generation += 1;
+            locked = true;
+        },
+        unlock() {
+            locked = false;
+        }
+    });
+})();
+window.__workbenchAuthGate = workbenchAuthGate;
+
+function canMutateWorkbench(generation) {
+    return workbenchAuthGate.allows(generation);
+}
+
+function captureWorkbenchGeneration() {
+    return workbenchAuthGate.capture();
+}
+
+const LOCKED_WORKBENCH_EVENTS = [
+    'beforeinput', 'change', 'click', 'cut', 'drop', 'input', 'keydown', 'paste', 'pointerdown', 'submit'
+];
+LOCKED_WORKBENCH_EVENTS.forEach(type => {
+    document.addEventListener(type, event => {
+        if (canMutateWorkbench() || event.target?.closest?.('#ssoAuthLock')) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }, true);
+});
+
 const BASIC_DENTITION_TEMPLATE_IDS = new Set([
     "io-missing", "cbct-missing", "scan-dentition-defect", "scan-edentulous",
     "io-extra", "scan-extra",
@@ -2539,12 +2579,15 @@ function setupOcNoiseFilterUI() {
 }
 
 function previewOcNoiseFilterChange() {
+    if (!canMutateWorkbench()) return;
     readOcNoiseControls();
     clampOcNoiseManualBounds(getOcNoiseMaxFrame());
     updateOcNoiseFilterLabels(getOcNoisePreviewMeta());
 }
 
 function commitOcNoiseFilterChange() {
+    if (!canMutateWorkbench()) return;
+    const generation = captureWorkbenchGeneration();
     readOcNoiseControls();
     clampOcNoiseManualBounds(getOcNoiseMaxFrame());
     const noiseOpen = document.getElementById('ocNoiseDetails')?.open !== false;
@@ -2552,6 +2595,7 @@ function commitOcNoiseFilterChange() {
     recomputeAllOcDatasets();
     renderOcResults();
     setTimeout(() => {
+        if (!canMutateWorkbench(generation)) return;
         const noise = document.getElementById('ocNoiseDetails');
         const arch = document.getElementById('ocArchDetails');
         if (noise) noise.open = noiseOpen;
@@ -2731,11 +2775,13 @@ function adjustSuggest(c, m, missing) {
 
 // ========== 咬合文件上传处理 ==========
 async function handleOcFile(mode, file) {
-    if (!file) return;
+    if (!file || !canMutateWorkbench()) return;
+    const generation = captureWorkbenchGeneration();
     console.log(`[咬合解析] handleOcFile() 触发 mode="${mode}" file="${file.name}"`);
     try {
         if (!window.XLSX) throw new Error('无法加载 Excel 解析库');
         const buf = await file.arrayBuffer();
+        if (!canMutateWorkbench(generation)) return;
         const wb = XLSX.read(buf, { type: 'array' });
         const raw = parseWorkbook(wb, file.name);
         const parsed = normalize(raw);
@@ -2748,6 +2794,7 @@ async function handleOcFile(mode, file) {
         updateOcParseButton();
         toast(`${OC_MODES.find(m => m.key === mode).name}文件已就绪`);
     } catch (err) {
+        if (!canMutateWorkbench(generation)) return;
         console.error(err);
         toast(`解析失败：${err.message}`);
     }
@@ -2763,6 +2810,7 @@ function updateOcParseButton() {
 }
 
 function runOcclusionAnalysis() {
+    if (!canMutateWorkbench()) return;
     const loaded = Object.entries(ocDatasets);
     if (!loaded.length) { toast('请先上传至少一个文件'); return; }
     ocAnalysisDone = true;
@@ -3118,6 +3166,7 @@ function renderOcUploadSection() {
 }
 
 function clearOcAnalysis() {
+    if (!canMutateWorkbench()) return;
     stopOcArchPlayback();
     disposeOcArch3D();
     ocFiles = {};
@@ -3174,6 +3223,7 @@ function stopOcArchPlayback() {
 }
 
 function startOcArchPlayback() {
+    if (!canMutateWorkbench()) return;
     const ctx = getOcArchContext();
     if (!ctx || !ctx.frames.length) return;
     stopOcArchPlayback();
@@ -3181,6 +3231,7 @@ function startOcArchPlayback() {
     const btn = document.getElementById('archPlayBtn');
     if (btn) btn.textContent = '暂停';
     ocArchState.timer = setInterval(() => {
+        if (!canMutateWorkbench()) { stopOcArchPlayback(); return; }
         const total = getOcArchContext()?.frames?.length || 0;
         if (!total) return;
         ocArchState.frameIndex = (ocArchState.frameIndex + 1) % total;
@@ -3189,6 +3240,7 @@ function startOcArchPlayback() {
 }
 
 function toggleOcArchPlayback() {
+    if (!canMutateWorkbench()) return;
     if (ocArchState.playing) stopOcArchPlayback();
     else startOcArchPlayback();
 }
@@ -3207,6 +3259,7 @@ function bindOcArchControls() {
 }
 
 function onOcArchDetailsToggle(el) {
+    if (!canMutateWorkbench()) return;
     bindOcArchControls();
     if (el.open) refreshOcArchUI(true);
     else stopOcArchPlayback();
@@ -3474,6 +3527,7 @@ function hasRestorationOnTooth(tooth) {
 }
 
 function generateOcAnnotations() {
+    if (!canMutateWorkbench()) return;
     if (!ocAnalysisDone) { toast('请先完成解析'); return; }
     const generated = [];
     const defaultStatus = document.getElementById('defaultStatus').value || '已确认';
@@ -3697,6 +3751,7 @@ function init() {
     renderAnnotationList();
     updatePreview();
     document.getElementById('defaultStatus').addEventListener('change', (e) => {
+        if (!canMutateWorkbench()) return;
         currentStatus = e.target.value;
         if (currentExam !== 'occlusion') renderCurrentPanel();
     });
@@ -3713,6 +3768,7 @@ function renderExamTabs() {
         btn.className = 'exam-tab' + (exam.id === currentExam ? ' active' : '');
         btn.textContent = exam.name;
         btn.onclick = () => {
+            if (!canMutateWorkbench()) return;
             currentExam = exam.id;
             currentTemplate = null;
             clearFormState();
@@ -3742,6 +3798,7 @@ function toggleOcMode() {
 }
 
 function setTemplateSearch(value) {
+    if (!canMutateWorkbench()) return;
     templateSearchTerm = String(value || '').trim().toLowerCase();
     renderTemplates();
 }
@@ -3840,6 +3897,7 @@ function renderQuickCombos() {
 }
 
 function selectTemplate(id) {
+    if (!canMutateWorkbench()) return;
     const tpl = TEMPLATES.find(t => t.id === id);
     if (!tpl) { toast('未找到对应模板'); return; }
     clearFormState(false);
@@ -3855,6 +3913,7 @@ function selectTemplate(id) {
 }
 
 function applyCombo(combo) {
+    if (!canMutateWorkbench()) return;
     selectTemplate(combo.templateId);
     if (combo.area) {
         const shortcut = REGION_SHORTCUTS.find(item => item.label === combo.area);
@@ -3875,6 +3934,7 @@ function applyCombo(combo) {
 }
 
 function clearFormState(keepTemplate = false) {
+    if (!canMutateWorkbench()) return;
     selectedTeeth = new Set();
     selectedAreas = new Set();
     selectedOptions = {};
@@ -3885,6 +3945,7 @@ function clearFormState(keepTemplate = false) {
 }
 
 function clearCurrentInputsKeepTemplate() {
+    if (!canMutateWorkbench()) return;
     selectedTeeth = new Set();
     selectedAreas = new Set();
     selectedOptions = {};
@@ -4014,6 +4075,7 @@ function getTemplateCoverageState(tpl) {
 }
 
 function toggleNegativeTemplate(tplId, event) {
+    if (!canMutateWorkbench()) return;
     event?.stopPropagation?.();
     const tpl = TEMPLATES.find(t => t.id === tplId);
     if (!tpl) return;
@@ -4112,11 +4174,13 @@ function updateValidationUI() {
 }
 
 function setAnnotationFilter(mode) {
+    if (!canMutateWorkbench()) return;
     annotationFilter = mode;
     renderAnnotationList();
 }
 
 function setAnnotationGroupMode(mode) {
+    if (!canMutateWorkbench()) return;
     annotationGroupMode = mode;
     renderAnnotationList();
 }
@@ -4252,7 +4316,10 @@ function renderCurrentPanel() {
     const note = document.getElementById('noteInput');
     if (note) {
         note.value = noteValue;
-        note.addEventListener('input', e => noteValue = e.target.value);
+        note.addEventListener('input', e => {
+            if (!canMutateWorkbench()) return;
+            noteValue = e.target.value;
+        });
     }
 }
 
@@ -4271,6 +4338,7 @@ function renderInterdentalSites() {
         btn.textContent = site;
         if (isReview || isConfirmed) btn.title = isReview ? '该字段该牙位之间已标为待复核' : '该字段该牙位之间已标记';
         btn.onclick = () => {
+            if (!canMutateWorkbench()) return;
             selectedAreas.has(site) ? selectedAreas.delete(site) : selectedAreas.add(site);
             renderInterdentalSites();
             updateValidationUI();
@@ -4294,6 +4362,7 @@ function renderRanges() {
         btn.title = effectiveTeeth.length ? `选择：${effectiveTeeth.join('、')}` : '该区域没有可选有效牙位';
         btn.disabled = effectiveTeeth.length === 0;
         btn.onclick = () => {
+            if (!canMutateWorkbench()) return;
             if (allSelected) effectiveTeeth.forEach(t => selectedTeeth.delete(t));
             else effectiveTeeth.forEach(t => addToothSelection(t));
             renderRanges();
@@ -4366,6 +4435,7 @@ function renderLocationStateSummary() {
 }
 
 function addToothSelection(tooth) {
+    if (!canMutateWorkbench()) return;
     const item = String(tooth);
     if (isToothUnavailable(item)) return;
     selectedAreas.clear();
@@ -4373,6 +4443,7 @@ function addToothSelection(tooth) {
 }
 
 function toggleToothSelection(tooth) {
+    if (!canMutateWorkbench()) return;
     const item = String(tooth);
     if (isToothUnavailable(item)) {
         toast('该牙位已标记为缺失，后续字段不可选');
@@ -4382,6 +4453,7 @@ function toggleToothSelection(tooth) {
 }
 
 function applyManualTeeth() {
+    if (!canMutateWorkbench()) return;
     const raw = document.getElementById('manualTeeth').value;
     if (currentTemplate && currentTemplate.locationMode === 'interdental') {
         const clean = raw.replace(/\s+/g, '');
@@ -4451,6 +4523,7 @@ function isOptionSelected(group, opt) {
 }
 
 function toggleOption(group, opt) {
+    if (!canMutateWorkbench()) return;
     if (group.multi) {
         const arr = Array.isArray(selectedOptions[group.key]) ? [...selectedOptions[group.key]] : [];
         const idx = arr.indexOf(opt);
@@ -4497,17 +4570,20 @@ function renderExtraInputs() {
     box.appendChild(block);
     box.querySelectorAll('input[data-extra-key]').forEach(el => {
         el.addEventListener('input', e => {
+            if (!canMutateWorkbench()) return;
             extraValues[e.target.dataset.extraKey] = e.target.value;
         });
     });
 }
 
 function setStatus(status) {
+    if (!canMutateWorkbench()) return;
     currentStatus = status;
     renderCurrentPanel();
 }
 
 function saveAsReview() {
+    if (!canMutateWorkbench()) return;
     currentStatus = '待复核';
     saveAnnotation(false);
 }
@@ -4562,6 +4638,7 @@ function collectAnnotation() {
 }
 
 function saveAnnotation(keepSameField) {
+    if (!canMutateWorkbench()) return;
     const err = validateAnnotation();
     if (err) { toast(err); return; }
     const ann = collectAnnotation();
@@ -4714,18 +4791,21 @@ function buildTargetGroupedItems(items) {
 }
 
 function editAnnotation(idx) {
+    if (!canMutateWorkbench()) return;
     loadAnnotationToForm(idx);
     editIndex = idx;
     toast(`正在编辑第 ${idx + 1} 条`);
 }
 
 function copyAnnotationToForm(idx) {
+    if (!canMutateWorkbench()) return;
     loadAnnotationToForm(idx);
     editIndex = null;
     toast('已复制到录入区，可修改后保存');
 }
 
 function duplicateAnnotation(idx) {
+    if (!canMutateWorkbench()) return;
     const copy = JSON.parse(JSON.stringify(annotations[idx]));
     copy.id = makeId();
     copy.created_at = new Date().toISOString();
@@ -4739,11 +4819,13 @@ function duplicateAnnotation(idx) {
 }
 
 function loadLastAnnotation() {
+    if (!canMutateWorkbench()) return;
     if (!annotations.length) { toast('还没有上一条可复制'); return; }
     copyAnnotationToForm(annotations.length - 1);
 }
 
 function loadAnnotationToForm(idx) {
+    if (!canMutateWorkbench()) return;
     const ann = annotations[idx];
     const tpl = TEMPLATES.find(t => t.id === ann.template_id);
     if (!tpl) { toast('找不到对应模板'); return; }
@@ -4770,6 +4852,7 @@ function loadAnnotationToForm(idx) {
 }
 
 function toggleReview(idx) {
+    if (!canMutateWorkbench()) return;
     annotations[idx].status = annotations[idx].status === '待复核' ? '已确认' : '待复核';
     annotations[idx].review_priority = annotations[idx].status === '待复核' ? 'clinical_high_value' : '';
     annotations[idx].review_reason = annotations[idx].status === '待复核' ? '医生判断难点' : '';
@@ -4780,6 +4863,7 @@ function toggleReview(idx) {
 }
 
 function deleteAnnotation(idx) {
+    if (!canMutateWorkbench()) return;
     if (!confirm(`确定删除第 ${idx + 1} 条标注？`)) return;
     annotations.splice(idx, 1);
     renderTemplates();
@@ -4935,6 +5019,7 @@ function updatePreview() {
 }
 
 function downloadJSON() {
+    if (!canMutateWorkbench()) return;
     if (!confirmCoverageBeforeExport()) return;
     updatePreview();
     const data = JSON.stringify(getExportData(), null, 2);
@@ -4942,6 +5027,7 @@ function downloadJSON() {
 }
 
 function downloadTSV() {
+    if (!canMutateWorkbench()) return;
     if (!confirmCoverageBeforeExport()) return;
     const rows = [[
         'id', 'case_id', 'exam_type', 'modality_id', 'template', 'template_id',
@@ -4970,22 +5056,27 @@ function downloadTSV() {
 }
 
 function copyJSON() {
+    if (!canMutateWorkbench()) return;
+    const generation = captureWorkbenchGeneration();
     if (!confirmCoverageBeforeExport()) return;
     updatePreview();
     navigator.clipboard.writeText(JSON.stringify(getExportData(), null, 2))
-        .then(() => toast('JSON 已复制'))
-        .catch(() => toast('复制失败，请从预览框手动复制'));
+        .then(() => { if (canMutateWorkbench(generation)) toast('JSON 已复制'); })
+        .catch(() => { if (canMutateWorkbench(generation)) toast('复制失败，请从预览框手动复制'); });
 }
 
 
 function importArchiveFromInput(input) {
+    if (!canMutateWorkbench()) return;
     const file = input?.files?.[0];
     if (!file) return;
+    const generation = captureWorkbenchGeneration();
     const reader = new FileReader();
     reader.onload = () => {
+        if (!canMutateWorkbench(generation)) return;
         try {
             const data = JSON.parse(String(reader.result || ''));
-            restoreArchiveData(data);
+            restoreArchiveData(data, generation);
             toast(`已导入存档：${annotations.length} 条标注`);
         } catch (err) {
             console.error(err);
@@ -4995,13 +5086,15 @@ function importArchiveFromInput(input) {
         }
     };
     reader.onerror = () => {
+        if (!canMutateWorkbench(generation)) return;
         toast('读取文件失败');
         input.value = '';
     };
     reader.readAsText(file, 'utf-8');
 }
 
-function restoreArchiveData(data) {
+function restoreArchiveData(data, generation) {
+    if (!canMutateWorkbench(generation)) return;
     if (!data || typeof data !== 'object') throw new Error('invalid archive');
     const meta = data.meta || {};
     const ui = data.ui_state || data.page_state || {};
@@ -5124,6 +5217,7 @@ function makeExportName(ext) {
 }
 
 function downloadFile(filename, content, mime) {
+    if (!canMutateWorkbench()) return;
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -5137,6 +5231,7 @@ function downloadFile(filename, content, mime) {
 }
 
 function handleShortcuts(e) {
+    if (!canMutateWorkbench()) return;
     const tag = document.activeElement?.tagName?.toLowerCase();
     const isTextInput = tag === 'input' || tag === 'textarea';
     if (e.ctrlKey && e.key === 'Enter') {
@@ -5549,6 +5644,7 @@ function bootstrapWorkbench() {
     }
 
     function setIntraoralPreviewImages(items) {
+        if (!canMutateWorkbench()) return;
         revokeOldObjectUrls();
         ioPreviewItems = Array.from(items || []).map(normalizePreviewItem).filter(item => item && item.src);
         ioPreviewIndex = 0;
@@ -5556,6 +5652,7 @@ function bootstrapWorkbench() {
     }
 
     function addIntraoralPreviewImages(items) {
+        if (!canMutateWorkbench()) return;
         const normalized = Array.from(items || []).map((item, i) => normalizePreviewItem(item, ioPreviewItems.length + i)).filter(item => item && item.src);
         ioPreviewItems = ioPreviewItems.concat(normalized);
         if (ioPreviewItems.length && ioPreviewIndex < 0) ioPreviewIndex = 0;
@@ -5563,6 +5660,7 @@ function bootstrapWorkbench() {
     }
 
     function loadIntraoralPreviewFiles(fileList) {
+        if (!canMutateWorkbench()) return;
         const files = Array.from(fileList || []).filter(file => /^image\//.test(file.type));
         if (!files.length) return;
         revokeOldObjectUrls();
@@ -5584,6 +5682,7 @@ function bootstrapWorkbench() {
     }
 
     function openIntraoralPreview() {
+        if (!canMutateWorkbench()) return;
         injectStyle();
         injectOverlay();
         const overlay = document.getElementById(OVERLAY_ID);
@@ -5598,6 +5697,7 @@ function bootstrapWorkbench() {
     }
 
     function closeIntraoralPreview() {
+        if (!canMutateWorkbench()) return;
         const overlay = document.getElementById(OVERLAY_ID);
         if (!overlay) return;
         overlay.classList.remove('show');
@@ -5609,24 +5709,28 @@ function bootstrapWorkbench() {
     }
 
     function toggleIntraoralPreview() {
+        if (!canMutateWorkbench()) return;
         const overlay = document.getElementById(OVERLAY_ID);
         if (overlay && overlay.classList.contains('show')) closeIntraoralPreview();
         else openIntraoralPreview();
     }
 
     function stepIntraoralPreview(step) {
+        if (!canMutateWorkbench()) return;
         if (!ioPreviewItems.length) return;
         ioPreviewIndex = (ioPreviewIndex + step + ioPreviewItems.length) % ioPreviewItems.length;
         renderIntraoralPreview();
     }
 
     function goIntraoralPreview(index) {
+        if (!canMutateWorkbench()) return;
         if (!ioPreviewItems.length) return;
         ioPreviewIndex = Math.max(0, Math.min(ioPreviewItems.length - 1, index));
         renderIntraoralPreview();
     }
 
     function toggleIntraoralPreviewFit() {
+        if (!canMutateWorkbench()) return;
         ioPreviewFitMode = ioPreviewFitMode === 'contain' ? 'width' : 'contain';
         renderIntraoralPreview();
     }
@@ -5691,6 +5795,7 @@ function bootstrapWorkbench() {
     }
 
     function handlePreviewKeydown(e) {
+        if (!canMutateWorkbench()) return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         const overlay = document.getElementById(OVERLAY_ID);
         const open = overlay && overlay.classList.contains('show');
@@ -5744,10 +5849,12 @@ function bootstrapWorkbench() {
 <script id="sso-workbench-heartbeat">
 (function protectAnnotationWorkbench() {
     const HEARTBEAT_MS = 60_000;
+    const PROBE_TIMEOUT_MS = 10_000;
     const LOCK_ID = 'ssoAuthLock';
-    let checkInFlight = null;
+    let activeController = null;
     let heartbeat = null;
     let lockObserver = null;
+    let probeGeneration = 0;
     let ssoDisabled = false;
 
     function setWorkbenchInert(locked) {
@@ -5764,12 +5871,18 @@ function bootstrapWorkbench() {
     }
 
     function lockCopy(status) {
+        if (status === 'checking') return ['正在验证身份', '正在确认 PACT 标注工作台会话。'];
         if (status === 403) return ['未获工作台授权', '当前 PACT 账户没有标注工作台访问权限。'];
         if (status === 503) return ['身份服务暂不可用', '为保护工作内容，工作台已暂停操作，请稍后重新检查。'];
         return ['登录已失效', 'PACT 会话已过期或退出，请重新登录后继续。'];
     }
 
     function lockWorkbench(status) {
+        window.__workbenchAuthGate?.lock();
+        if (typeof stopOcArchPlayback === 'function') stopOcArchPlayback();
+        if (document.fullscreenElement && document.exitFullscreen) {
+            try { document.exitFullscreen().catch(() => {}); } catch (error) {}
+        }
         let lock = document.getElementById(LOCK_ID);
         if (!lock) {
             lock = document.createElement('div');
@@ -5796,46 +5909,67 @@ function bootstrapWorkbench() {
         lockObserver = null;
         document.getElementById(LOCK_ID)?.remove();
         setWorkbenchInert(false);
+        window.__workbenchAuthGate?.unlock();
     }
 
     async function checkSession() {
         if (ssoDisabled) return;
-        if (checkInFlight) return checkInFlight;
-        checkInFlight = (async () => {
-            try {
-                const response = await fetch('/api/auth/session', {
+        const generation = ++probeGeneration;
+        activeController?.abort();
+        const controller = new AbortController();
+        activeController = controller;
+        let timeoutId;
+        const timeout = new Promise((resolve, reject) => {
+            timeoutId = setTimeout(() => {
+                controller.abort();
+                reject(new DOMException('Session probe timed out', 'TimeoutError'));
+            }, PROBE_TIMEOUT_MS);
+        });
+        try {
+            const response = await Promise.race([
+                fetch('/api/auth/session', {
                     credentials: 'same-origin',
                     cache: 'no-store',
-                    headers: { Accept: 'application/json' }
-                });
-                const body = await response.json();
-                if (response.status === 200 && body.ssoEnabled === false) {
-                    ssoDisabled = true;
-                    clearInterval(heartbeat);
-                    unlockWorkbench();
-                    return;
-                }
-                if (response.status === 200 && body.authenticated === true) {
-                    unlockWorkbench();
-                    return;
-                }
-                lockWorkbench(response.status === 403 ? 403 : response.status === 503 ? 503 : 401);
-            } catch (error) {
-                lockWorkbench(503);
+                    headers: { Accept: 'application/json' },
+                    signal: controller.signal
+                }),
+                timeout
+            ]);
+            const body = await Promise.race([response.json(), timeout]);
+            if (generation !== probeGeneration) return;
+            if (response.status === 200 && body.ssoEnabled === false) {
+                ssoDisabled = true;
+                clearInterval(heartbeat);
+                unlockWorkbench();
+                return;
             }
-        })();
-        try {
-            await checkInFlight;
+            if (response.status === 200 && body.authenticated === true && body.permission === 'annotate.access') {
+                unlockWorkbench();
+                return;
+            }
+            const denied = response.status === 403 || (response.status === 200 && body.authenticated === true);
+            lockWorkbench(denied ? 403 : response.status === 503 ? 503 : 401);
+        } catch (error) {
+            if (generation === probeGeneration) lockWorkbench(503);
         } finally {
-            checkInFlight = null;
+            clearTimeout(timeoutId);
+            if (activeController === controller) activeController = null;
         }
     }
 
+    window.__ssoWorkbenchAuth = Object.freeze({ checkSession });
+
     function bootAuthHeartbeat() {
+        lockWorkbench('checking');
         checkSession();
         heartbeat = setInterval(checkSession, HEARTBEAT_MS);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') checkSession();
+        });
+        document.addEventListener('fullscreenchange', () => {
+            if (!window.__workbenchAuthGate?.allows() && document.fullscreenElement && document.exitFullscreen) {
+                try { document.exitFullscreen().catch(() => {}); } catch (error) {}
+            }
         });
     }
 

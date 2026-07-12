@@ -15,6 +15,14 @@ function ssoEnabled(env) {
   return env.SSO_ENABLED === '1' || env.SSO_ENABLED === 'true';
 }
 
+function isWorkbenchPath(pathname) {
+  try {
+    return decodeURIComponent(pathname) === WORKBENCH_PATH;
+  } catch {
+    return false;
+  }
+}
+
 function nextRequest(context, url) {
   if (!url) return context.next();
   return context.next(new Request(url, context.request));
@@ -34,7 +42,17 @@ function failure(state) {
 
 export async function onRequest(context) {
   const url = new URL(context.request.url);
-  if (url.hostname.toLowerCase() !== ANNOTATION_HOST) return context.next();
+  const host = url.hostname.toLowerCase();
+  if (isWorkbenchPath(url.pathname) && host !== ANNOTATION_HOST) {
+    return new Response(null, {
+      status: 308,
+      headers: {
+        Location: `https://${ANNOTATION_HOST}/`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+  if (host !== ANNOTATION_HOST) return context.next();
 
   const rewritten = url.pathname === '/'
     ? new URL(`${WORKBENCH_PATH}${url.search}${url.hash}`, url)
